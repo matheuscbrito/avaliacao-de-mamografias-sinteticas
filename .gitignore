@@ -13,3 +13,7 @@ roi_previews/
 roi_val*/
 roi_check*/
 *.output
+
+# saídas GLCM
+glcm_previews/
+glcm_baseline_*.csv
