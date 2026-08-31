@@ -48,7 +48,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 from scipy import ndimage as ndi
-from skimage.filters import threshold_otsu
+from skimage.filters import threshold_li, threshold_otsu
 from skimage.measure import label, regionprops
 from skimage.morphology import closing, disk, remove_small_objects
 
@@ -68,9 +68,15 @@ BRIGHT_PERCENTILE = 99.6      # acima disto (dentro da mama) = marcador/calcific
 MAX_SATURATED_IN_ROI = 0.02   # fração máxima de pixels "muito claros" tolerada na ROI
 
 # limites das checagens de sanidade da máscara (calibrados no OMAMA-DB)
-MIN_BG_FRACTION = 0.12        # mamografia real tem bastante ar; abaixo disto cheira a espécime/plate
+# calibrados p/ REJEITAR espécime/plate/painel sem derrubar mamografia real
+# (mama grande tem pouco ar; mama pode ter uma pequena margem da borda).
+MIN_BG_FRACTION = 0.04        # abaixo disto: quase sem ar no quadro
 MIN_LARGEST_COMP_FRACTION = 0.85  # maior componente / todo o "não-fundo": abaixo = máscara fragmentada
 MAX_EXTENT = 0.93           # área / área da bounding box; acima disto = placa/painel retangular
+MIN_AREA_FRAC = 0.06         # silhueta ocupa menos que isto do quadro = máscara fina/incorreta (limiar falhou)
+MIN_EDGE_CONTACT = 0.02      # a mama é flush com a parede torácica; placa "flutuante" ~0
+MAX_HOLES_NEG = -12          # euler_number do componente cru abaixo disto = placa de grade (dezenas de buracos)
+WORK_MAX = 1100             # a máscara/elegível são calculadas nesta resolução máx. (o recorte final é full-res)
 WORK_MAX = 1100             # a máscara/elegível são calculadas nesta resolução máx. (o recorte final é full-res)
 
 
@@ -157,27 +163,28 @@ def load_image(path: str) -> np.ndarray:
 # ---------------------------------------------------------------------------
 def _robust_background_threshold(img: np.ndarray) -> float:
     """
-    Limiar que separa o fundo de ar do resto.
+    Limiar que separa o fundo de ar do resto: **min(Otsu, Li)**.
 
-    Combina duas ideias para ser robusto aos dois modos de falha já vistos:
-      - Otsu por imagem (adaptativo ao histograma), MAS
-      - limitado por um corte baixo relativo à faixa dinâmica robusta
-        (percentis 0.5 e 99.9, não min/max — um único pixel de ruído claro
-        não infla mais o resultado).
-
-    Pegamos o MENOR dos dois: assim, se o Otsu cair no meio da população de
-    tecido (imagens com histograma de tecido largo/claro, que faziam a máscara
-    fragmentar), o corte baixo segura e a silhueta sai inteira.
+    Nenhum método sozinho cobre os dois casos difíceis do OMAMA-DB:
+      - **mama gordurosa** (interior escuro): Otsu cai ENTRE gordura e tecido
+        denso e a máscara sai só do núcleo denso. Li senta mais baixo e pega a
+        mama inteira.
+      - **fundo NÃO preto** (exposição/gradiente de fundo elevado): um corte
+        muito baixo pegaria o fundo todo como "tecido". Otsu e Li separam certo
+        aqui (testado).
+    Pegar o menor dos dois resolve o caso gorduroso sem estragar os demais.
+    'Lua crescente' (borda densa só) é resolvida depois por _fill_from_chestwall.
     """
     lo, hi = np.percentile(img, [0.5, 99.9])
-    piso = lo + 0.04 * (hi - lo)
-    try:
-        otsu = threshold_otsu(img)
-        if not (lo < otsu < hi):
-            return piso
-        return min(otsu, piso)
-    except Exception:
-        return piso
+    cands = []
+    for fn in (threshold_otsu, threshold_li):
+        try:
+            t = float(fn(img))
+            if lo < t < hi:
+                cands.append(t)
+        except Exception:
+            pass
+    return min(cands) if cands else lo + 0.05 * (hi - lo)
 
 
 def _fill_from_chestwall(comp: np.ndarray) -> np.ndarray:
@@ -222,6 +229,7 @@ def breast_silhouette(img: np.ndarray) -> tuple[np.ndarray, dict]:
     """
     thr = _robust_background_threshold(img)
     raw = img > thr
+    bg_level = float(np.percentile(img, 2))
 
     # limpeza morfológica proporcional ao tamanho da imagem
     r = max(1, min(img.shape) // 200)
@@ -237,13 +245,22 @@ def breast_silhouette(img: np.ndarray) -> tuple[np.ndarray, dict]:
     if lab.max() == 0:
         return np.zeros_like(img, dtype=bool), {**stats, "solidity": 0.0,
                                                 "largest_comp_fraction": 0.0,
-                                                "area_frac": 0.0, "extent": 0.0}
+                                                "area_frac": 0.0, "extent": 0.0,
+                                                "edge_contact": 0.0, "euler": 1}
 
-    regs = regionprops(lab)
-    maior = max(regs, key=lambda p: p.area)
+    # A mama é a maior região BRILHANTE. Ponderar por (área × brilho acima do
+    # fundo) impede que um leve gradiente no fundo preto — que às vezes passa do
+    # limiar e forma um blob grande e escuro — seja escolhido no lugar da mama.
+    regs = regionprops(lab, intensity_image=img)
+    def _peso(p):
+        return p.area * max(p.mean_intensity - bg_level, 1.0)
+    maior = max(regs, key=_peso)
     comp = lab == maior.label
     total_fg = float(filled.sum())
     stats["largest_comp_fraction"] = float(maior.area / total_fg) if total_fg else 0.0
+    # nº de buracos no componente CRU (antes de tapar): placa de grade de
+    # espécime tem dezenas (grade + letras); mama é simplesmente conexa (~1).
+    stats["euler"] = int(maior.euler_number)
 
     # preenche a silhueta a partir da parede torácica (resolve a 'lua crescente'
     # quando o interior gorduroso fica abaixo do limiar) e tapa buracos internos.
@@ -254,6 +271,11 @@ def breast_silhouette(img: np.ndarray) -> tuple[np.ndarray, dict]:
     stats["solidity"] = float(mp.solidity)
     stats["extent"] = float(mp.extent)
     stats["area_frac"] = float(mask.sum() / mask.size)
+    # contato com as bordas do quadro: a mama fica flush com a parede torácica,
+    # então PELO MENOS uma borda tem boa cobertura. Uma placa/espécime que
+    # "flutua" no meio do quadro não encosta em borda nenhuma.
+    stats["edge_contact"] = float(max(mask[0, :].mean(), mask[-1, :].mean(),
+                                      mask[:, 0].mean(), mask[:, -1].mean()))
     return mask, stats
 
 
@@ -261,12 +283,22 @@ def _sanity_check(stats: dict) -> tuple[bool, str | None, list[str]]:
     """Traduz os stats da máscara em (rejeitar?, motivo, avisos)."""
     warnings: list[str] = []
 
-    if stats.get("area_frac", 0) < 0.01:
-        return True, "mama não encontrada (silhueta vazia/minúscula)", warnings
+    if stats.get("area_frac", 0) < MIN_AREA_FRAC:
+        return True, (f"silhueta ocupa só {stats.get('area_frac', 0):.1%} do quadro — "
+                      f"máscara fina/incorreta (limiar provavelmente falhou)"), warnings
+
+    if stats.get("edge_contact", 1.0) < MIN_EDGE_CONTACT:
+        return True, (f"máscara não encosta em nenhuma borda do quadro "
+                      f"({stats.get('edge_contact', 0):.0%}) — não é mama flush com a "
+                      f"parede torácica (espécime em placa, painel, artefato)"), warnings
 
     if stats["bg_fraction"] < MIN_BG_FRACTION:
         return True, (f"pouco fundo de ar ({stats['bg_fraction']:.0%}) — provável "
                       f"radiografia de espécime/plate, não mamografia in vivo"), warnings
+
+    if stats.get("euler", 1) < MAX_HOLES_NEG:
+        return True, (f"componente com muitos buracos (euler={stats['euler']}) — "
+                      f"placa de grade de espécime, não silhueta de mama"), warnings
 
     if stats["largest_comp_fraction"] < MIN_LARGEST_COMP_FRACTION:
         return True, (f"máscara fragmentada (maior componente = "
