@@ -1,3 +1,15 @@
+# ambientes / caches
 .venv/
 __pycache__/
 *.pyc
+.DS_Store
+node_modules/
+
+# datasets locais (grandes, não versionar)
+2d_only_1000_images/
+
+# saídas de ferramentas (regeneráveis)
+roi_previews/
+roi_val*/
+roi_check*/
+*.output

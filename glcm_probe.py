@@ -1,238 +1,368 @@
-#!/usr/bin/env python3
 """
-glcm_probe.py — teste rápido de GLCM numa imagem de mamografia.
+glcm_probe.py
 
-Objetivo: jogar uma imagem (PNG/JPG/TIF/DICOM) e ver o que as features de
-GLCM retornam, sem compromisso com o pipeline final (Camada 2 - Textura).
+Script de teste (probe) para a Camada de Validade de Textura do framework:
+carrega imagens .npz de mamografia, faz um crop de ROI simples (evitando
+fundo preto e marcadores), roda o GLCM em 4 angulações, e imprime tudo de
+forma explicada: qual imagem, qual ROI, quais parâmetros, e o que cada
+feature está dizendo.
 
 Uso:
-    .venv/bin/python glcm_probe.py caminho/imagem.png
-    .venv/bin/python glcm_probe.py caso.dcm --levels 64 --roi center --roi-frac 0.5
-    .venv/bin/python glcm_probe.py img.png --json out.json --save-roi roi.png
+    python glcm_probe.py
 
-Notas de método (para discussão no grupo):
-- GLCM aqui = skimage.feature.graycomatrix / graycoprops.
-- Quantização: a imagem é reescalada para `--levels` níveis antes da GLCM.
-  Mamografia costuma ser 12-16 bit; usar 256 níveis deixa a matriz esparsa e
-  instável. 32-64 é o intervalo usual na literatura de radiômica.
-- Distâncias e ângulos default: d in {1,2,4} px, theta in {0,45,90,135}.
-- `contrast/dissimilarity/homogeneity/ASM/energy/correlation` vêm do skimage.
-  `entropy` é calculada à mão sobre a GLCM normalizada.
-- Reporta média sobre os 4 ângulos (aprox. invariante a rotação) e o desvio
-  entre ângulos (proxy de anisotropia — parênquima tem direção preferencial).
-- GLRLM NÃO está aqui: skimage não implementa. Para GLRLM/GLSZM use PyRadiomics.
+Ajuste PASTA_IMAGENS e N_IMAGENS abaixo antes de rodar.
 """
-from __future__ import annotations
 
-import argparse
-import json
-import sys
-from pathlib import Path
-
+import os
 import numpy as np
 from skimage.feature import graycomatrix, graycoprops
+import matplotlib.pyplot as plt
 
-DISTANCES = [1, 2, 4]
-ANGLES_DEG = [0, 45, 90, 135]
-ANGLES_RAD = [np.deg2rad(a) for a in ANGLES_DEG]
-SKIMAGE_PROPS = [
-    "contrast",
-    "dissimilarity",
-    "homogeneity",
-    "ASM",
-    "energy",
-    "correlation",
+# A extração de ROI (silhueta da mama, evitar fundo/marcador/peitoral, escolha
+# do recorte) vive agora num módulo próprio, reutilizável por qualquer métrica.
+from roi_extraction import (
+    load_image as _re_load,
+    extract_roi as _re_extract,
+    _robust_background_threshold as _re_bg_threshold,
+)
+
+# ---------------------------------------------------------------------------
+# CONFIGURAÇÃO — ajuste aqui
+# ---------------------------------------------------------------------------
+PASTA_IMAGENS = "2d_only_1000_images/images"   # caminho da pasta com os .npz
+N_IMAGENS = 3                                   # quantas imagens testar (só usado se ARQUIVOS_ESPECIFICOS estiver vazio)
+TAMANHO_ROI = 128                               # crop quadrado em pixels (lado)
+NIVEIS_CINZA = 32                               # quantização para o GLCM (8/16/32/64)
+DISTANCIA = 1                                   # distância entre pixel e vizinho (em pixels)
+ANGULOS = {
+    "0°":   0,
+    "45°":  np.pi / 4,
+    "90°":  np.pi / 2,
+    "135°": 3 * np.pi / 4,
+}
+
+# Preencha com nomes exatos de arquivos .npz para analisar SÓ esses,
+# na ordem que você colocar (útil para revisar outliers específicos do
+# analisar_baseline_csv.py, ou qualquer imagem que você queira conferir
+# manualmente). Deixe a lista vazia [] para usar o comportamento padrão
+# (as primeiras N_IMAGENS da pasta, em ordem alfabética).
+ARQUIVOS_ESPECIFICOS = [
+    # "100793095124884174010228504854086215788.npz",
+    # "101038413610535901267185902654058053919.npz",
 ]
 
+# Para o modo de comparação: liste aqui pares de arquivos que você julga
+# visualmente parecidos (ou visualmente diferentes), para conferir se o
+# GLCM concorda com o que o olho vê. Deixe a lista vazia [] para pular
+# essa etapa. Preencha com os nomes exatos dos arquivos .npz da pasta.
+COMPARAR_PARES = [
+    # ("arquivo_A.npz", "arquivo_B.npz"),
+]
 
-def load_image(path: Path) -> tuple[np.ndarray, dict]:
-    """Retorna imagem 2D float + metadados. Suporta DICOM e formatos comuns."""
-    suffix = path.suffix.lower()
-    meta: dict = {"path": str(path), "loader": None}
+# ---------------------------------------------------------------------------
+# FUNÇÕES
+# ---------------------------------------------------------------------------
 
-    if suffix in {".dcm", ".dicom", ""} or _looks_like_dicom(path):
-        import pydicom
-
-        ds = pydicom.dcmread(str(path), force=True)
-        arr = ds.pixel_array.astype(np.float64)
-        slope = float(getattr(ds, "RescaleSlope", 1) or 1)
-        intercept = float(getattr(ds, "RescaleIntercept", 0) or 0)
-        arr = arr * slope + intercept
-        photometric = str(getattr(ds, "PhotometricInterpretation", "")).strip()
-        if photometric == "MONOCHROME1":
-            # MONOCHROME1: valores altos = escuro. Inverte para o padrão visual.
-            arr = arr.max() - arr
-        meta.update(
-            loader="pydicom",
-            photometric=photometric or None,
-            rescale_slope=slope,
-            rescale_intercept=intercept,
-            bits_stored=int(getattr(ds, "BitsStored", 0)) or None,
-            shape=list(arr.shape),
-        )
-        if arr.ndim == 3:
-            arr = arr.mean(axis=-1)
-        return arr, meta
-
-    from PIL import Image
-
-    im = Image.open(path)
-    if im.mode not in {"I", "I;16", "F", "L"}:
-        im = im.convert("L")
-    arr = np.asarray(im).astype(np.float64)
-    if arr.ndim == 3:
-        arr = arr.mean(axis=-1)
-    meta.update(loader="pillow", pil_mode=im.mode, shape=list(arr.shape))
-    return arr, meta
+def carregar_imagem(caminho):
+    """Carrega a imagem (delegado a roi_extraction.load_image: .npz/.npy/.png/.dcm)."""
+    return _re_load(caminho)
 
 
-def _looks_like_dicom(path: Path) -> bool:
-    try:
-        with open(path, "rb") as fh:
-            fh.seek(128)
-            return fh.read(4) == b"DICM"
-    except OSError:
-        return False
+def calcular_limiar_tecido(img):
+    """Limiar fundo/tecido — delegado a roi_extraction (mantido por compatibilidade)."""
+    return _re_bg_threshold(np.asarray(img, dtype=np.float64))
 
 
-def extract_roi(arr: np.ndarray, mode: str, frac: float) -> tuple[np.ndarray, dict]:
-    """ROI simples. `full` = imagem toda; `center` = recorte central `frac`.
-
-    Para o pipeline real a ROI deve cair em tecido fibroglandular (evitar fundo
-    de ar e a borda pele/músculo). Aqui é só um recorte grosseiro para o teste.
+def encontrar_roi_valida(img, tamanho, fracao_minima=0.7, passos_busca=15):
     """
-    info = {"mode": mode, "frac": frac}
-    if mode == "full":
-        info["bbox"] = [0, 0, arr.shape[0], arr.shape[1]]
-        return arr, info
-    h, w = arr.shape
-    rh, rw = int(h * frac), int(w * frac)
-    r0, c0 = (h - rh) // 2, (w - rw) // 2
-    info["bbox"] = [r0, c0, r0 + rh, c0 + rw]
-    return arr[r0 : r0 + rh, c0 : c0 + rw], info
+    Wrapper de compatibilidade em volta de `roi_extraction.extract_roi`.
+
+    A lógica de extração (silhueta da mama por limiar robusto + preenchimento a
+    partir da parede torácica, checagens de sanidade que rejeitam espécime/
+    plate/máscara fragmentada, região elegível erodida evitando pele/marcadores/
+    peitoral, ROI no centróide do parênquima) agora vive em `roi_extraction.py`,
+    para ser reaproveitada por qualquer métrica — não só o GLCM.
+
+    Mantém a assinatura antiga: retorna (roi_array, (x0, y0, x1, y1), fracao).
+    `passos_busca` é ignorado (não há mais busca em grade no caminho principal).
+    Levanta ValueError se a imagem for rejeitada ou nenhuma ROI servir.
+    """
+    res = _re_extract(np.asarray(img, dtype=np.float64), size=tamanho,
+                      min_tissue_fraction=fracao_minima)
+    if res.rejected or not res.ok or res.roi is None:
+        raise ValueError(res.reject_reason or "não foi possível extrair ROI válida")
+    r = res.roi
+    return r.array, r.bbox, r.tissue_fraction
 
 
-def quantize(arr: np.ndarray, levels: int, clip_pct: float) -> np.ndarray:
-    """Reescala para [0, levels-1] usando percentis (robusto a outliers)."""
-    lo, hi = np.percentile(arr, [clip_pct, 100 - clip_pct])
-    if hi <= lo:
-        lo, hi = float(arr.min()), float(arr.max() + 1e-6)
-    norm = np.clip((arr - lo) / (hi - lo), 0, 1)
-    q = np.round(norm * (levels - 1)).astype(np.uint8)
-    return q
+def quantizar(roi, niveis):
+    """Reduz a imagem para N níveis de cinza, exigido pelo GLCM."""
+    roi_norm = (roi - roi.min()) / (roi.max() - roi.min() + 1e-8)
+    roi_quant = (roi_norm * (niveis - 1)).astype(np.uint8)
+    return roi_quant
 
 
-def glcm_entropy(glcm: np.ndarray) -> np.ndarray:
-    """Entropia de Shannon da GLCM, por (distância, ângulo)."""
-    p = glcm.astype(np.float64)
-    p /= p.sum(axis=(0, 1), keepdims=True) + 1e-12
-    ent = -np.sum(p * np.log2(p + 1e-12), axis=(0, 1))
-    return ent  # shape (n_dist, n_angle)
+def rodar_glcm(roi_quant, niveis):
+    """
+    Calcula o GLCM nas 4 angulações e extrai as 4 features clássicas:
+    contraste, homogeneidade, energia e correlação.
 
-
-def compute(arr_q: np.ndarray, levels: int) -> dict:
-    glcm = graycomatrix(
-        arr_q,
-        distances=DISTANCES,
-        angles=ANGLES_RAD,
-        levels=levels,
-        symmetric=True,
-        normed=False,  # graycoprops normaliza internamente; entropia normaliza à mão
-    )
-    out: dict = {"per_distance": {}}
-    ent = glcm_entropy(glcm)
-
-    for di, d in enumerate(DISTANCES):
-        block: dict = {"per_angle": {}, "angle_mean": {}, "angle_std": {}}
-        prop_vals = {}
-        for prop in SKIMAGE_PROPS:
-            vals = graycoprops(glcm, prop)[di]  # shape (n_angle,)
-            prop_vals[prop] = vals
-        prop_vals["entropy"] = ent[di]
-
-        for ai, a in enumerate(ANGLES_DEG):
-            block["per_angle"][f"{a}deg"] = {
-                p: float(v[ai]) for p, v in prop_vals.items()
-            }
-        for p, v in prop_vals.items():
-            block["angle_mean"][p] = float(np.mean(v))
-            block["angle_std"][p] = float(np.std(v))
-        out["per_distance"][f"d{d}"] = block
-    return out
-
-
-def print_report(meta: dict, roi_info: dict, levels: int, result: dict) -> None:
-    print("=" * 72)
-    print(f"imagem      : {meta['path']}")
-    print(f"loader      : {meta['loader']}  shape={meta.get('shape')}")
-    if meta.get("photometric"):
-        print(f"photometric : {meta['photometric']}  bits_stored={meta.get('bits_stored')}")
-    print(f"ROI         : {roi_info['mode']} frac={roi_info['frac']} bbox={roi_info['bbox']}")
-    print(f"quantização : {levels} níveis | distâncias={DISTANCES} | ângulos={ANGLES_DEG}")
-    print("=" * 72)
-
-    props = SKIMAGE_PROPS + ["entropy"]
-    for d in DISTANCES:
-        block = result["per_distance"][f"d{d}"]
-        print(f"\n[ distância = {d} px ]  (média ± desvio entre os 4 ângulos)")
-        print("-" * 72)
-        for p in props:
-            m = block["angle_mean"][p]
-            s = block["angle_std"][p]
-            aniso = f"  aniso={s / (abs(m) + 1e-9):5.1%}" if p != "entropy" else ""
-            print(f"  {p:<14} {m:12.5f}  ± {s:10.5f}{aniso}")
-    print("\n(aniso = desvio/|média|: quão dependente da direção é a textura)")
-    print("=" * 72)
-
-
-def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("image", type=Path, help="PNG/JPG/TIF/DICOM")
-    ap.add_argument("--levels", type=int, default=32, help="níveis de cinza para quantização (default 32)")
-    ap.add_argument("--roi", choices=["full", "center"], default="center", help="default: center")
-    ap.add_argument("--roi-frac", type=float, default=0.5, help="fração do lado no modo center (default 0.5)")
-    ap.add_argument("--clip-pct", type=float, default=1.0, help="percentil de corte na normalização (default 1.0)")
-    ap.add_argument("--json", type=Path, default=None, help="salva o resultado completo em JSON")
-    ap.add_argument("--save-roi", type=Path, default=None, help="salva a ROI quantizada como PNG (sanity check)")
-    args = ap.parse_args(argv)
-
-    if not args.image.exists():
-        print(f"erro: arquivo não encontrado: {args.image}", file=sys.stderr)
-        return 2
-    if args.levels < 2 or args.levels > 256:
-        print("erro: --levels deve estar em [2, 256]", file=sys.stderr)
-        return 2
-
-    arr, meta = load_image(args.image)
-    roi, roi_info = extract_roi(arr, args.roi, args.roi_frac)
-    roi_q = quantize(roi, args.levels, args.clip_pct)
-
-    if args.save_roi:
-        from PIL import Image
-
-        disp = (roi_q.astype(np.float64) / (args.levels - 1) * 255).astype(np.uint8)
-        Image.fromarray(disp).save(args.save_roi)
-        print(f"ROI quantizada salva em {args.save_roi}")
-
-    result = compute(roi_q, args.levels)
-    print_report(meta, roi_info, args.levels, result)
-
-    if args.json:
-        payload = {
-            "meta": meta,
-            "roi": roi_info,
-            "params": {
-                "levels": args.levels,
-                "distances": DISTANCES,
-                "angles_deg": ANGLES_DEG,
-                "clip_pct": args.clip_pct,
-            },
-            "glcm": result,
+    Retorna um dicionário {angulo: {feature: valor}} e a média por feature.
+    """
+    resultados = {}
+    for nome_ang, ang_rad in ANGULOS.items():
+        glcm = graycomatrix(
+            roi_quant,
+            distances=[DISTANCIA],
+            angles=[ang_rad],
+            levels=niveis,
+            symmetric=True,
+            normed=True,
+        )
+        resultados[nome_ang] = {
+            "contraste": graycoprops(glcm, "contrast")[0, 0],
+            "homogeneidade": graycoprops(glcm, "homogeneity")[0, 0],
+            "energia": graycoprops(glcm, "energy")[0, 0],
+            "correlacao": graycoprops(glcm, "correlation")[0, 0],
         }
-        args.json.write_text(json.dumps(payload, indent=2))
-        print(f"\nJSON completo em {args.json}")
-    return 0
+
+    medias = {}
+    for feat in ["contraste", "homogeneidade", "energia", "correlacao"]:
+        medias[feat] = np.mean([resultados[ang][feat] for ang in ANGULOS])
+
+    return resultados, medias
+
+
+def explicar_feature(nome, valor):
+    """Retorna uma frase curta interpretando o valor de cada feature."""
+    if nome == "contraste":
+        return "alto = textura mais grosseira/heterogênea; baixo = mais suave/uniforme"
+    if nome == "homogeneidade":
+        return "alto = pixels vizinhos parecidos entre si; baixo = mais variação local"
+    if nome == "energia":
+        return "alto = poucos padrões dominantes se repetindo; baixo = textura mais complexa"
+    if nome == "correlacao":
+        return "alto = forte dependência linear entre pixels vizinhos; baixo = mais aleatório"
+    return ""
+
+
+def interpretar_textura(medias, niveis):
+    """
+    Gera uma frase-resumo em linguagem natural interpretando o conjunto de
+    features desta imagem, usando faixas de referência relativas ao número
+    de níveis de cinza usado na quantização (para o contraste) e às escalas
+    fixas 0-1 das demais features (homogeneidade, energia, correlação).
+
+    Isso não substitui comparação entre imagens (que é o mais confiável),
+    mas dá uma leitura qualitativa rápida de cada imagem isolada.
+    """
+    contraste = medias["contraste"]
+    homogeneidade = medias["homogeneidade"]
+    energia = medias["energia"]
+    correlacao = medias["correlacao"]
+
+    contraste_max_teorico = (niveis - 1) ** 2
+    contraste_rel = contraste / contraste_max_teorico
+
+    if contraste_rel < 0.02:
+        desc_contraste = "textura bastante suave/uniforme"
+    elif contraste_rel < 0.08:
+        desc_contraste = "textura com heterogeneidade moderada"
+    else:
+        desc_contraste = "textura grosseira/heterogênea, com transições fortes entre regiões vizinhas"
+
+    if energia > 0.15:
+        desc_energia = "com poucos padrões dominantes se repetindo (mais previsível/repetitiva)"
+    elif energia > 0.05:
+        desc_energia = "com uma mistura moderada de padrões"
+    else:
+        desc_energia = "com muitos padrões diferentes coexistindo (textura complexa)"
+
+    if correlacao > 0.85:
+        desc_correlacao = "os pixels vizinhos são fortemente dependentes entre si (organização espacial clara)"
+    elif correlacao > 0.6:
+        desc_correlacao = "há uma dependência espacial moderada entre pixels vizinhos"
+    else:
+        desc_correlacao = "os pixels vizinhos variam de forma quase independente (aspecto mais ruidoso/aleatório)"
+
+    frase = (
+        f"Esta imagem apresenta {desc_contraste} "
+        f"(contraste={contraste:.2f}, {contraste_rel*100:.1f}% do máximo teórico para {niveis} níveis), "
+        f"{desc_energia} (energia={energia:.4f}), "
+        f"e {desc_correlacao} (correlação={correlacao:.4f}). "
+        f"A homogeneidade ficou em {homogeneidade:.4f} "
+        f"({'alta, reforçando o aspecto suave' if homogeneidade > 0.5 else 'baixa, reforçando o aspecto heterogêneo'})."
+    )
+    return frase
+
+
+def comparar_imagens(nome1, nome2, medias1, medias2, niveis):
+    """
+    Compara as features médias de duas imagens, calculando a diferença
+    relativa em cada uma e uma distância geral normalizada. Serve como
+    teste de sanidade: se duas imagens parecem visualmente parecidas,
+    espera-se diferença pequena aqui; se parecem bem diferentes a olho
+    nu, espera-se diferença maior.
+    """
+    contraste_max_teorico = (niveis - 1) ** 2
+    feats_norm = {
+        "contraste": (medias1["contraste"] / contraste_max_teorico,
+                      medias2["contraste"] / contraste_max_teorico),
+        "homogeneidade": (medias1["homogeneidade"], medias2["homogeneidade"]),
+        "energia": (medias1["energia"], medias2["energia"]),
+        "correlacao": (medias1["correlacao"], medias2["correlacao"]),
+    }
+
+    print(f"\nCOMPARANDO: {nome1}  vs  {nome2}")
+    diffs = []
+    for feat, (v1, v2) in feats_norm.items():
+        diff_abs = abs(v1 - v2)
+        diffs.append(diff_abs)
+        print(f"  {feat:15s} -> {nome1[:20]:20s} = {v1:.4f}  |  "
+              f"{nome2[:20]:20s} = {v2:.4f}  |  diferença = {diff_abs:.4f}")
+
+    distancia = float(np.sqrt(np.sum(np.array(diffs) ** 2)))
+    print(f"\n  Distância geral (euclidiana, features normalizadas 0-1): {distancia:.4f}")
+
+    if distancia < 0.10:
+        veredito = ("as métricas ficaram bem próximas — se essas duas imagens também "
+                     "parecem com textura semelhante a olho nu, é um bom sinal de que o "
+                     "pipeline está funcionando corretamente.")
+    elif distancia < 0.25:
+        veredito = ("as métricas ficaram moderadamente diferentes — vale conferir visualmente "
+                     "se a diferença encontrada bate com o que se espera dessas duas imagens.")
+    else:
+        veredito = ("as métricas ficaram bem diferentes. Se a expectativa era de texturas "
+                     "parecidas, vale investigar: pode ser diferença real de tecido, ou a ROI "
+                     "pode ter caído em regiões não comparáveis (uma em tecido denso, outra em "
+                     "gordura, por exemplo) — confira as marcações visuais das duas.")
+
+    print(f"  Veredito: {veredito}")
+    return distancia
+
+
+def visualizar(img, roi_coords, roi_quant, nome_arquivo):
+    """Mostra a imagem inteira com a ROI marcada, e a ROI já quantizada ao lado."""
+    x0, y0, x1, y1 = roi_coords
+    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+
+    axs[0].imshow(img, cmap="gray")
+    axs[0].add_patch(plt.Rectangle((x0, y0), x1 - x0, y1 - y0,
+                                    edgecolor="red", facecolor="none", linewidth=2))
+    axs[0].set_title(f"Imagem completa\n{nome_arquivo}", fontsize=9)
+    axs[0].axis("off")
+
+    axs[1].imshow(roi_quant, cmap="gray")
+    axs[1].set_title(f"ROI usada no GLCM\n({NIVEIS_CINZA} níveis de cinza)", fontsize=9)
+    axs[1].axis("off")
+
+    plt.tight_layout()
+    plt.show()
+
+
+# ---------------------------------------------------------------------------
+# EXECUÇÃO PRINCIPAL
+# ---------------------------------------------------------------------------
+
+def analisar_imagem(nome_arquivo, mostrar=True):
+    """
+    Executa o pipeline completo (carregar -> ROI -> quantizar -> GLCM) para
+    um único arquivo, imprime os detalhes e retorna as médias das features.
+    Reaproveitada tanto no loop principal quanto no modo de comparação.
+    """
+    caminho = os.path.join(PASTA_IMAGENS, nome_arquivo)
+    if not os.path.exists(caminho):
+        print(f"\nAVISO: arquivo não encontrado: '{caminho}' — pulando.")
+        print("=" * 70)
+        return None
+
+    print(f"\nIMAGEM: {nome_arquivo}")
+    img = carregar_imagem(caminho)
+    print(f"  Formato original: {img.shape} | tipo: {img.dtype} | "
+          f"min={img.min():.1f} max={img.max():.1f}")
+
+    try:
+        roi, roi_coords, frac_tecido = encontrar_roi_valida(img, TAMANHO_ROI)
+    except ValueError as e:
+        print(f"  AVISO: {e}")
+        print("=" * 70)
+        return None
+
+    x0, y0, x1, y1 = roi_coords
+    print(f"  ROI extraída: crop de {TAMANHO_ROI}x{TAMANHO_ROI}px, "
+          f"posição (x={x0}:{x1}, y={y0}:{y1}), "
+          f"fração de tecido na ROI = {frac_tecido:.0%}")
+
+    roi_quant = quantizar(roi, NIVEIS_CINZA)
+    print(f"  ROI quantizada para {NIVEIS_CINZA} níveis de cinza "
+          f"(necessário para o cálculo do GLCM)")
+
+    print(f"  Calculando GLCM: distância={DISTANCIA}px, "
+          f"ângulos={list(ANGULOS.keys())}")
+
+    resultados, medias = rodar_glcm(roi_quant, NIVEIS_CINZA)
+
+    print("\n  Resultado por ângulo:")
+    for ang, feats in resultados.items():
+        linha = "    " + ang.rjust(5) + " -> "
+        linha += " | ".join(f"{k}={v:.4f}" for k, v in feats.items())
+        print(linha)
+
+    print("\n  Média entre os 4 ângulos (valor-resumo por imagem):")
+    for feat, valor in medias.items():
+        print(f"    {feat:15s} = {valor:.4f}")
+
+    print("\n  INTERPRETAÇÃO:")
+    print(f"  {interpretar_textura(medias, NIVEIS_CINZA)}")
+
+    if mostrar:
+        print("\n  Exibindo imagem + ROI marcada...")
+        visualizar(img, roi_coords, roi_quant, nome_arquivo)
+
+    print("=" * 70)
+    return medias
+
+
+def main():
+    if ARQUIVOS_ESPECIFICOS:
+        arquivos_para_rodar = ARQUIVOS_ESPECIFICOS
+        print(f"Modo arquivos específicos: analisando {len(arquivos_para_rodar)} "
+              f"arquivo(s) escolhido(s) manualmente.\n")
+    else:
+        arquivos = sorted([f for f in os.listdir(PASTA_IMAGENS) if f.endswith(".npz")])
+        print(f"Encontrei {len(arquivos)} arquivos .npz em '{PASTA_IMAGENS}'.")
+        print(f"Vou analisar as primeiras {N_IMAGENS} agora.\n")
+        arquivos_para_rodar = arquivos[:N_IMAGENS]
+    print("=" * 70)
+
+    resultados_por_imagem = {}
+    for nome_arquivo in arquivos_para_rodar:
+        medias = analisar_imagem(nome_arquivo)
+        if medias is not None:
+            resultados_por_imagem[nome_arquivo] = medias
+
+    if COMPARAR_PARES:
+        print("\n\n" + "#" * 70)
+        print("# MODO COMPARAÇÃO — testando se imagens visualmente parecidas")
+        print("# retornam métricas parecidas (teste de sanidade do pipeline)")
+        print("#" * 70)
+        for nome1, nome2 in COMPARAR_PARES:
+            if nome1 not in resultados_por_imagem:
+                resultados_por_imagem[nome1] = analisar_imagem(nome1, mostrar=False)
+            if nome2 not in resultados_por_imagem:
+                resultados_por_imagem[nome2] = analisar_imagem(nome2, mostrar=False)
+            if resultados_por_imagem.get(nome1) is None or resultados_por_imagem.get(nome2) is None:
+                print(f"\nPulando comparação {nome1} vs {nome2}: um dos arquivos não foi encontrado.")
+                continue
+            comparar_imagens(nome1, nome2,
+                              resultados_por_imagem[nome1],
+                              resultados_por_imagem[nome2],
+                              NIVEIS_CINZA)
+
+    print("\nFeito. Compare visualmente se as imagens com contraste/homogeneidade "
+          "diferentes realmente parecem ter texturas diferentes a olho nu — "
+          "esse é o teste de sanidade antes de fixar os parâmetros e escalar.")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    main()
