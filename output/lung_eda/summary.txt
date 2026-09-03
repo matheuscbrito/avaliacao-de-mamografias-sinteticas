@@ -1,0 +1,10 @@
+Lung CT paired-dataset EDA
+n_complete_pairs: 100
+n_missing_companion_files: 0
+psnr_full_mean: 25.344516001690057
+psnr_full_median: 25.354696034508112
+ssim_full_mean: 0.8156123046614756
+ssim_full_median: 0.8208188223314801
+mae_full_mean: 0.10799811049510906
+mae_mask_nonzero_mean: 0.3355088014839013
+mask_nonzero_area_fraction_median: 0.3266181945800781

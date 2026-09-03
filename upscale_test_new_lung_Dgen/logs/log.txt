@@ -1,0 +1,8 @@
+Modelo aekl: D:\Users\dayv\lung_upscaler\mamografIA_upscaler\outputs\runs_final\aekl\model_aekl_best_4_latent_new_lung.pth
+Modelo de difusão: D:\Users\dayv\lung_upscaler\mamografIA_upscaler\outputs\runs_final\ldm\model_ldm_pulmao_Dgen.pth
+Validação:
+-------------------------------------------------
+PSNR médio: 24.53325292379549
+MAE médio: 0.10692882205885236
+MSSIM médio: 0.7135840866825368
+SSIM médio: 0.681365167150403
