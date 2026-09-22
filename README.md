@@ -1,37 +1,34 @@
 # Avaliação de textura em CT pulmonar sintética
 
 Este repositório compara duas gerações sintéticas para os mesmos cortes de CT
-pulmonar: **Dgen** e **Dsr**. A análise atual usa GLCM dentro da ROI pulmonar
-e mantém os materiais de apresentação separados dos resultados reproduzíveis.
+pulmonar: **Dgen** e **Dsr**. A análise atual usa GLCM dentro da região do
+pulmão.
 
 ## Organização
 
-- `datasets/ct/Dgen/`: conjunto anterior, com original, sintética e máscara.
-- `datasets/ct/Dsr/`: nova geração; contém os mesmos originais e suas
+- `dados/Dgen/`: conjunto anterior, com original, sintética e máscara.
+- `dados/Dsr/`: nova geração; contém os mesmos originais e suas
   sintéticas, mas não traz máscaras próprias.
-- `lung_texture_mvp/`: pipeline e dashboard GLCM.
-- `reports/`: CSVs, sínteses e figuras geradas por análises.
-- `assets/slide_images/`: imagens prontas para uso em slides.
-- `presentations/`: arquivos PowerPoint.
-- `docs/`: documentação metodológica.
-- `tools/`: scripts auxiliares e análises históricas de Dgen.
+- `glcm/`: código da análise e dashboard.
+- `resultados/`: tabelas da comparação entre as duas gerações.
+- `slides/`: apresentação atual e imagens para inserir em novos slides.
+- `documentacao/`: descrição do framework.
 
 ## Comparação Dgen × Dsr
 
-Rode a partir de `lung_texture_mvp/`:
+Rode a partir de `glcm/`:
 
 ```bash
 ../.venv/bin/python -m src.compare_generations \
-  --dgen-dir ../datasets/ct/Dgen \
-  --dsr-dir ../datasets/ct/Dsr \
-  --output-dir ../reports/dataset_comparison
+  --dgen-dir ../dados/Dgen \
+  --dsr-dir ../dados/Dsr \
+  --output-dir ../resultados/comparacao_Dgen_Dsr
 ```
 
 O script só reutiliza as máscaras Dgen após confirmar que os 100 cortes
 originais são idênticos em Dgen e Dsr. Ele seleciona os 37 cortes com ROI
 pulmonar válida pela regra operacional do MVP e grava as razões de exclusão
-dos demais 63. As montagens visuais são copiadas para
-`assets/slide_images/dataset_comparison/` quando forem aprovadas para slides.
+dos demais 63. As montagens visuais aprovadas ficam em `slides/imagens/`.
 
 ## Resultado inicial
 
