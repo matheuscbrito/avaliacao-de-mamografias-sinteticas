@@ -176,9 +176,9 @@ for row in comparisons:
     summary_rows.append({
         "Caso": row["case_id"], "Decisão": title,
         "Contraste: distância do par": percentage(as_float(row["relative_delta_contrast"])),
-        "Contraste: referência": "Fora" if row["synthetic_contrast_outside_reference"] == "True" else "Dentro",
+        "Contraste: referência global": "Dentro da referência" if row["synthetic_contrast_outside_reference"] == "False" else "Fora da referência",
         "Energia: distância do par": percentage(as_float(row["relative_delta_energy"])),
-        "Energia: referência": "Fora" if row["synthetic_energy_outside_reference"] == "True" else "Dentro",
+        "Energia: referência global": "Dentro da referência" if row["synthetic_energy_outside_reference"] == "False" else "Fora da referência",
         "Explicação": row["decision_reason"],
     })
 st.dataframe(summary_rows, use_container_width=True, hide_index=True)

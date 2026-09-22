@@ -24,7 +24,7 @@ Instale as dependências em um ambiente virtual e execute, a partir desta pasta:
 
 ```bash
 pip install -r requirements.txt
-python -m src.run_pipeline --data-dir /caminho/para/upscale_test_new_lung_Dgen
+python -m src.run_pipeline --data-dir /caminho/para/datasets/ct/Dgen
 streamlit run dashboard/app.py
 ```
 
@@ -33,7 +33,7 @@ comandos globais `python`, `pip` ou `streamlit` não forem encontrados, use:
 
 ```bash
 "/Users/ltodaro/dev/metricas-avaliacao/.venv/bin/python" -m pip install -r requirements.txt
-"/Users/ltodaro/dev/metricas-avaliacao/.venv/bin/python" -m src.run_pipeline --data-dir "/Users/ltodaro/dev/metricas-avaliacao/upscale_test_new_lung_Dgen"
+"/Users/ltodaro/dev/metricas-avaliacao/.venv/bin/python" -m src.run_pipeline --data-dir "/Users/ltodaro/dev/metricas-avaliacao/datasets/ct/Dgen"
 "/Users/ltodaro/dev/metricas-avaliacao/.venv/bin/python" -m streamlit run dashboard/app.py
 ```
 
