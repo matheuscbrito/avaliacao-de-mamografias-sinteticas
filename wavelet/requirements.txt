@@ -4,3 +4,4 @@ scikit-image>=0.22
 matplotlib>=3.8
 streamlit>=1.38
 PyWavelets>=1.4
+scipy>=1.11
