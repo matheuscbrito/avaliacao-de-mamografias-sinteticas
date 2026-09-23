@@ -1,7 +1,7 @@
 # Avaliação de textura em CT pulmonar sintética
 
 Este repositório compara duas gerações sintéticas para os mesmos cortes de CT
-pulmonar: **Dgen** e **Dsr**. A análise atual usa GLCM dentro da região do
+pulmonar: **Dgen** e **Dsr**. A análise usa GLCM e wavelet dentro da região do
 pulmão.
 
 ## Organização
@@ -9,7 +9,8 @@ pulmão.
 - `dados/Dgen/`: conjunto anterior, com original, sintética e máscara.
 - `dados/Dsr/`: nova geração; contém os mesmos originais e suas
   sintéticas, mas não traz máscaras próprias.
-- `glcm/`: código da análise e dashboard.
+- `glcm/`: código da análise GLCM e dashboard.
+- `wavelet/`: código da análise wavelet e dashboard.
 - `resultados/`: tabelas da comparação entre as duas gerações.
 - `slides/`: apresentação atual e imagens para inserir em novos slides.
 - `documentacao/`: descrição do framework.
@@ -42,3 +43,12 @@ No protocolo GLCM de 32 tons e intervalo global calculado nas originais:
 Isso não equivale a uma validação clínica. Dsr ainda tem contraste GLCM abaixo
 do original na mediana e deve ser avaliado também com wavelet e as demais
 métricas antes de uma decisão de uso.
+
+## Resultado wavelet
+
+A mesma comparação com features wavelet está em
+`resultados/comparacao_Dgen_Dsr_wavelet/resumo.md`. O Dsr ficou mais próximo
+da original em energia (26 de 37 pares) e em entropia (31 de 37) e acompanha a
+textura de cada corte (Spearman ≈ 0,8). Já a energia do Dgen tem correlação
+negativa com a original. As duas gerações perdem em torno de 40% da energia de
+alta frequência.

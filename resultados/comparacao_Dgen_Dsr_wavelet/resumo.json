@@ -1,0 +1,81 @@
+{
+  "shared_pairs": 100,
+  "valid_pairs": 37,
+  "invalid_pairs": 63,
+  "clip_interval": [
+    -0.44059285521507263,
+    1.5841565132141113
+  ],
+  "wavelet": "haar",
+  "level": 2,
+  "min_tissue": 0.9,
+  "pair_iqr_threshold": 1.0,
+  "energy": {
+    "median_original": 0.013079367005529715,
+    "median_dgen": 0.007283597927525189,
+    "median_dsr": 0.0077335164516524925,
+    "median_dgen_error": 0.0054469684491890435,
+    "median_dsr_error": 0.005265386955413462,
+    "median_dgen_pair_distance_iqr": 1.0083341250076174,
+    "median_dsr_pair_distance_iqr": 0.9747200480487107,
+    "dsr_closer": 26,
+    "dgen_closer": 11,
+    "wilcoxon_p": 0.00035424670204520226,
+    "spearman_original_dgen": -0.43195827406353715,
+    "spearman_original_dsr": 0.773352299668089
+  },
+  "entropy": {
+    "median_original": 0.9374964904678517,
+    "median_dgen": 0.9524286522716823,
+    "median_dsr": 0.9444272828122342,
+    "median_dgen_error": 0.013612748280485754,
+    "median_dsr_error": 0.006936287568456434,
+    "median_dgen_pair_distance_iqr": 0.6887072474338739,
+    "median_dsr_pair_distance_iqr": 0.3509263096805728,
+    "dsr_closer": 31,
+    "dgen_closer": 6,
+    "wilcoxon_p": 1.422064087819308e-05,
+    "spearman_original_dgen": 0.2413466097676624,
+    "spearman_original_dsr": 0.7939781887150307
+  },
+  "status_counts": {
+    "dgen": {
+      "approved": 8,
+      "approved_with_observation": 0,
+      "manual_review": 29,
+      "reject": 0
+    },
+    "dsr": {
+      "approved": 9,
+      "approved_with_observation": 0,
+      "manual_review": 28,
+      "reject": 0
+    }
+  },
+  "median_log2_energy_ratio": {
+    "s1_LH": {
+      "dgen": -0.6975639274981215,
+      "dsr": -0.8337254883062778
+    },
+    "s1_HL": {
+      "dgen": -0.9991433156261533,
+      "dsr": -0.9537915724497922
+    },
+    "s1_HH": {
+      "dgen": -0.8841046953938873,
+      "dsr": -1.1916282295066458
+    },
+    "s2_LH": {
+      "dgen": -0.5449758992914104,
+      "dsr": -0.5459417779744198
+    },
+    "s2_HL": {
+      "dgen": -0.9996004029343667,
+      "dsr": -0.7066643529192487
+    },
+    "s2_HH": {
+      "dgen": -0.8839211380508863,
+      "dsr": -0.8585705428021103
+    }
+  }
+}
