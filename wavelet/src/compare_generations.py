@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import spearmanr, wilcoxon
 
-from .build_reference import FEATURES, build_reference
+from .build_reference import FEATURES, build_reference, reference_rows
 from .compare_images import compare_case
 from .load_data import CasePaths, load_image
 from .run_pipeline import write_csv
@@ -156,8 +157,11 @@ def main() -> None:
         for generation in GENERATIONS:
             decision = compare_case(case_id, original, generated[generation], reference, args.pair_iqr_threshold)
             row[f"{generation}_status"] = decision["status"]
+            row[f"{generation}_decision_reason"] = decision["decision_reason"]
             for feature in FEATURES:
                 row[f"{generation}_pair_distance_{feature}_iqr"] = decision[f"pair_distance_{feature}_iqr"]
+                row[f"{generation}_relative_delta_{feature}"] = decision[f"relative_delta_{feature}"]
+                row[f"{generation}_{feature}_outside_reference"] = decision[f"synthetic_{feature}_outside_reference"]
             for scale, key in scale_keys(levels):
                 for band in BANDS:
                     ratio = generated[generation][f"energy_{key}_{band}"] / max(original[f"energy_{key}_{band}"], 1e-12)
@@ -168,6 +172,9 @@ def main() -> None:
         "shared_pairs": len(shared), "valid_pairs": len(rows), "invalid_pairs": len(rejected),
         "clip_interval": [clip_low, clip_high], "wavelet": args.wavelet, "level": levels,
         "min_tissue": args.min_tissue, "pair_iqr_threshold": args.pair_iqr_threshold,
+        # relativos à pasta de saída, para o dashboard achar as imagens em qualquer máquina
+        "dgen_dir": os.path.relpath(args.dgen_dir.resolve(), args.output_dir.resolve()),
+        "dsr_dir": os.path.relpath(args.dsr_dir.resolve(), args.output_dir.resolve()),
     }
     for feature in FEATURES:
         dgen_errors = [row[f"dgen_{feature}_error"] for row in rows]
@@ -195,6 +202,7 @@ def main() -> None:
     figures.mkdir(parents=True, exist_ok=True)
     write_csv(args.output_dir / "metricas_por_caso.csv", rows)
     write_csv(args.output_dir / "casos_invalidos.csv", rejected)
+    write_csv(args.output_dir / "referencia_originais.csv", reference_rows(reference))
     (args.output_dir / "resumo.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     save_scatter(rows, figures / "original_vs_sinteticas.png")
     save_subband_ratios(rows, levels, figures / "energia_por_subbanda.png")

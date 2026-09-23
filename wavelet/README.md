@@ -49,6 +49,8 @@ python -m src.compare_generations --dgen-dir ../dados/Dgen --dsr-dir ../dados/Ds
 
 O resultado e a leitura ficam em `../resultados/comparacao_Dgen_Dsr_wavelet/resumo.md`.
 
+O dashboard tem uma página **Dgen x Dsr** que lê esses resultados. Nela dá para ver cada corte com a original e as duas sintéticas lado a lado, a decisão do framework para cada geração, e a energia por sub-banda para descobrir em qual escala o detalhe foi perdido. Os cortes podem ser ordenados pela vantagem de uma geração sobre a outra.
+
 ## O que cada script faz
 
 - `src/load_data.py`: encontra os três arquivos de cada caso e abre as imagens.
@@ -59,6 +61,7 @@ O resultado e a leitura ficam em `../resultados/comparacao_Dgen_Dsr_wavelet/resu
 - `src/run_pipeline.py`: orquestra tudo e salva CSVs e figuras.
 - `src/compare_generations.py`: compara Dgen e Dsr sobre os mesmos cortes e originais.
 - `dashboard/app.py`: lê os arquivos prontos; não recalcula features.
+- `dashboard/pages/1_Dgen_x_Dsr.py`: página da comparação Dgen × Dsr, a partir de `../resultados/comparacao_Dgen_Dsr_wavelet`.
 
 ## Como a ROI entra na wavelet
 

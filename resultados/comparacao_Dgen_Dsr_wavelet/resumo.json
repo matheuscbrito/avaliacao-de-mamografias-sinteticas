@@ -10,6 +10,8 @@
   "level": 2,
   "min_tissue": 0.9,
   "pair_iqr_threshold": 1.0,
+  "dgen_dir": "../../dados/Dgen",
+  "dsr_dir": "../../dados/Dsr",
   "energy": {
     "median_original": 0.013079367005529715,
     "median_dgen": 0.007283597927525189,
