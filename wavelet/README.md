@@ -1,6 +1,6 @@
 # MVP de validação de textura pulmonar com wavelet
 
-Este projeto avalia se uma CT pulmonar sintética preserva a textura da original que a condicionou e continua plausível perante as CTs reais validadas do mesmo dataset. É o irmão do MVP de GLCM (`../lung_texture_mvp`): mesmo fluxo, mesma leitura de resultados, outra família de features.
+Este projeto avalia se uma CT pulmonar sintética preserva a textura da original que a condicionou e continua plausível perante as CTs reais validadas do mesmo dataset. É o irmão do MVP de GLCM (`../glcm`): mesmo fluxo, mesma leitura de resultados, outra família de features.
 
 Enquanto o GLCM mede relações de coadjacência entre pares de pixels vizinhos, a wavelet decompõe a ROI em sub-bandas de frequência e orientação. As duas abordagens são complementares: a wavelet enxerga textura em múltiplas escalas ao mesmo tempo.
 
@@ -28,7 +28,7 @@ Instale as dependências em um ambiente virtual e execute, a partir desta pasta:
 
 ```bash
 pip install -r requirements.txt
-python -m src.run_pipeline --data-dir /caminho/para/upscale_test_new_lung_Dgen
+python -m src.run_pipeline_fullimage --data-dir ../dados/Dgen
 streamlit run dashboard/app.py
 ```
 
@@ -39,6 +39,16 @@ Parâmetros específicos da wavelet:
 - `--wavelet` (padrão `db4`): família wavelet, qualquer nome aceito pelo PyWavelets (`haar`, `db2`, `sym4`, `coif1`...).
 - `--level` (padrão `2`): níveis de decomposição. Se a ROI for pequena demais para o nível pedido, o script usa o máximo possível e registra em `levels_used`.
 
+## Comparação Dgen × Dsr
+
+`src/compare_generations.py` roda o método de imagem inteira sobre as duas gerações (`../dados/Dgen` e `../dados/Dsr`) nos mesmos cortes da comparação GLCM. As máscaras do Dgen são reutilizadas depois de confirmar que as originais são idênticas nos dois conjuntos.
+
+```bash
+python -m src.compare_generations --dgen-dir ../dados/Dgen --dsr-dir ../dados/Dsr --output-dir ../resultados/comparacao_Dgen_Dsr_wavelet
+```
+
+O resultado e a leitura ficam em `../resultados/comparacao_Dgen_Dsr_wavelet/resumo.md`.
+
 ## O que cada script faz
 
 - `src/load_data.py`: encontra os três arquivos de cada caso e abre as imagens.
@@ -47,6 +57,7 @@ Parâmetros específicos da wavelet:
 - `src/build_reference.py`: cria a distribuição de referência das originais aceitas.
 - `src/compare_images.py`: compara a sintética tanto com a original do par quanto com a referência.
 - `src/run_pipeline.py`: orquestra tudo e salva CSVs e figuras.
+- `src/compare_generations.py`: compara Dgen e Dsr sobre os mesmos cortes e originais.
 - `dashboard/app.py`: lê os arquivos prontos; não recalcula features.
 
 ## Como a ROI entra na wavelet
