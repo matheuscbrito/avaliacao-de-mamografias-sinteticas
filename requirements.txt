@@ -1,0 +1,34 @@
+# Dependências do repositório.
+#
+#   uv venv --python 3.12 .venv
+#   uv pip install -r requirements.txt
+#
+# ---------------------------------------------------------------------------
+# NÚCLEO — exigido por roi_extraction.py e glcm_referencia.py
+# ---------------------------------------------------------------------------
+numpy==2.5.2
+scipy==1.18.1                 # roi_extraction: ndimage
+scikit-image==0.26.0          # graycomatrix/graycoprops, filters, measure, morphology
+matplotlib==3.11.1            # roi_extraction.save_preview (--previews)
+pillow==12.3.0                # roi_extraction.load_image: PNG/JPG/TIF
+pydicom==3.0.2                # roi_extraction.load_image: DICOM
+
+# ---------------------------------------------------------------------------
+# ADICIONAL — só para extracao_metricas_textura.ipynb
+# ---------------------------------------------------------------------------
+# A célula 1 do notebook compara estas versões com as instaladas e registra as
+# OBSERVADAS no config_hash de toda linha gravada: resultados produzidos com
+# versões diferentes não são intercambiáveis.
+pandas==3.0.5
+pyarrow==25.0.1
+ipywidgets==8.1.9
+jupyterlab
+
+# ---------------------------------------------------------------------------
+# ADICIONAL — bancada de textura do gen-fid (src/texture, notebooks/, tests/)
+# ---------------------------------------------------------------------------
+tifffile==2026.8.23           # io.read_tiff: os pares do gen-fid são TIFF float32
+pyyaml==6.0.3                 # store.Config: config.yaml
+nbformat==5.11.1              # notebooks/build_notebooks.py
+nbconvert==7.17.1             # execução dos notebooks (--execute)
+pytest==9.1.1                 # tests/test_estimators.py

@@ -7,6 +7,8 @@ node_modules/
 
 # datasets locais (grandes, não versionar)
 2d_only_1000_images/
+data/
+gen-fid/
 
 # saídas de ferramentas (regeneráveis)
 roi_previews/
@@ -17,3 +19,6 @@ roi_check*/
 # saídas GLCM
 glcm_previews/
 glcm_baseline_*.csv
+
+# saídas da bancada de textura (regeneráveis)
+outputs/
