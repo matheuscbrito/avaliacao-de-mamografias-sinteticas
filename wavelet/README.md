@@ -51,6 +51,47 @@ O resultado e a leitura ficam em `../resultados/comparacao_Dgen_Dsr_wavelet/resu
 
 O dashboard tem uma página **Dgen x Dsr** que lê esses resultados. Nela dá para ver cada corte com a original e as duas sintéticas lado a lado, a decisão do framework para cada geração, e a energia por sub-banda para descobrir em qual escala o detalhe foi perdido. Os cortes podem ser ordenados pela vantagem de uma geração sobre a outra.
 
+## Eixo de densidade
+
+As features de textura (wavelet, GLCM e NEx) foram feitas para ignorar o brilho
+médio. Por isso, um pulmão que ficou claro demais pode passar como textura boa.
+`src/density_features.py` cobre esse ponto cego olhando só para o histograma
+dos pixels dentro da máscara:
+
+1. junta os pixels pulmonares de todas as originais e pega P1 e P99, a faixa
+   normal de um pulmão real;
+2. em cada imagem, mede a fração do pulmão acima do P99 (`frac_bright`), abaixo
+   do P1 (`frac_dark`) e a posição da mediana dentro da faixa (`lung_median`,
+   0 = P1, 1 = P99);
+3. compara a sintética com **a sua própria original**: há cortes reais
+   legitimamente escuros, e a sintética que os acompanha está certa.
+
+O status (`*_density_status`) segue do mais grave ao mais leve:
+
+- `too_bright` / `too_dark`: a sintética põe mais pulmão fora da faixa real do
+  que a original, além do limite de Tukey das originais (saturação ou tecido
+  trocado);
+- `brighter` / `darker`: nada saiu da faixa, mas a mediana andou mais de 1 IQR
+  das medianas das originais (o pulmão inteiro foi deslocado);
+- `ok`.
+
+A guarda não muda o status de textura. Quando a densidade não está `ok`, a
+coluna `*_status_with_density` manda o corte para `manual_review`.
+
+## Teste de perturbação
+
+`src/perturbation_test.py` aplica defeitos conhecidos às **originais** (brilho,
+contraste, gama, lavagem do pulmão, saturação, suavização e ruído). Depois mede
+os quatro eixos: densidade, wavelet, GLCM (importada de `../glcm`) e NEx
+(`src/nyquist_excess.py`, copiado de
+[gabrielbringel/nyquist-excess](https://github.com/gabrielbringel/nyquist-excess)).
+A mudança de cada métrica é dada em IQR entre as originais, então todos os eixos
+ficam na mesma régua. O teste serve para conferir se cada eixo mede o que promete.
+
+```bash
+python -m src.perturbation_test --data-dir ../dados/Dgen --output-dir ../resultados/teste_perturbacao_wavelet
+```
+
 ## O que cada script faz
 
 - `src/load_data.py`: encontra os três arquivos de cada caso e abre as imagens.
@@ -60,6 +101,9 @@ O dashboard tem uma página **Dgen x Dsr** que lê esses resultados. Nela dá pa
 - `src/compare_images.py`: compara a sintética tanto com a original do par quanto com a referência.
 - `src/run_pipeline.py`: orquestra tudo e salva CSVs e figuras.
 - `src/compare_generations.py`: compara Dgen e Dsr sobre os mesmos cortes e originais.
+- `src/density_features.py`: eixo de densidade (pulmão claro ou escuro demais).
+- `src/perturbation_test.py`: teste de perturbação controlada dos quatro eixos.
+- `src/nyquist_excess.py`: estimador NEx, usado só no teste de perturbação.
 - `dashboard/app.py`: lê os arquivos prontos; não recalcula features.
 - `dashboard/pages/1_Dgen_x_Dsr.py`: página da comparação Dgen × Dsr, a partir de `../resultados/comparacao_Dgen_Dsr_wavelet`.
 

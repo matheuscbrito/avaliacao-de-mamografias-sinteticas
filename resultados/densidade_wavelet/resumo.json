@@ -1,0 +1,248 @@
+{
+  "n_originais": 37,
+  "limites_densidade": {
+    "frac_bright": 0.03389538554784724,
+    "frac_dark": 0.005289776539195953,
+    "lung_median": 0.146634625327029
+  },
+  "simulado": {
+    "Só brilho (+25%)": {
+      "ll": 0.24638152247140005,
+      "fine": 89.76854191385496,
+      "coarse": 85.38964879928119,
+      "ratio": 1.0557061964232157,
+      "median_shift_iqr": 1.7049179171866289,
+      "density": "clareou (31/37)",
+      "wavelet": "textura preservada (27/37)"
+    },
+    "Lavagem (40% branco)": {
+      "ll": 0.2954773873915823,
+      "fine": 36.0,
+      "coarse": 36.18941761392027,
+      "ratio": 0.9948199889781386,
+      "median_shift_iqr": 2.1344260729259013,
+      "density": "clareou",
+      "wavelet": "perdeu contraste"
+    },
+    "Gama (0,6)": {
+      "ll": 0.3760875047045344,
+      "fine": 116.84911639099721,
+      "coarse": 97.96456710878269,
+      "ratio": 1.1630873255197864,
+      "median_shift_iqr": 2.719529081184363,
+      "density": "claro demais (27/37)",
+      "wavelet": "textura preservada (12/37)"
+    },
+    "Fundo preenchido (até a mediana)": {
+      "ll": 0.02729842621565276,
+      "fine": 81.63984906122774,
+      "coarse": 82.1462624928481,
+      "ratio": 1.0092685587744046,
+      "median_shift_iqr": 0.0,
+      "density": "normal",
+      "wavelet": "textura preservada (21/37)"
+    },
+    "Brilho + borrado (+25%, σ=1)": {
+      "ll": 0.24902661980916208,
+      "fine": 33.85341147991343,
+      "coarse": 45.478327060173655,
+      "ratio": 0.7456868001314808,
+      "median_shift_iqr": 1.7511622164706122,
+      "density": "clareou (34/37)",
+      "wavelet": "borrou"
+    },
+    "Lavagem só em metade do pulmão": {
+      "ll": 0.21356510209847623,
+      "fine": 65.08485903362546,
+      "coarse": 66.79136051535271,
+      "ratio": 1.0665471545318057,
+      "median_shift_iqr": 2.8770490439113385,
+      "density": "clareou",
+      "wavelet": "borrou (14/37)"
+    }
+  },
+  "dataset_padrao_cruzamento": {
+    "normal + borrou": 25,
+    "normal + textura preservada": 5,
+    "normal + perdeu contraste": 4,
+    "escureceu + borrou": 1,
+    "escureceu + perdeu contraste": 1,
+    "escuro demais + borrou": 1
+  },
+  "linhas_reais": {
+    "Padrão: normal + borrou (25)": {
+      "ll": -0.06484134897396684,
+      "fine": 51.43687406352638,
+      "coarse": 62.29602950812688,
+      "ratio": 0.8253059334984765,
+      "median_shift_iqr": -0.3909041144269931,
+      "density": "normal",
+      "wavelet": "borrou"
+    },
+    "Padrão: normal + textura preservada (5)": {
+      "ll": -0.0654434735013033,
+      "fine": 89.46221703922555,
+      "coarse": 104.89920973778372,
+      "ratio": 1.0305007273978104,
+      "median_shift_iqr": -0.4061055485323805,
+      "density": "normal",
+      "wavelet": "textura preservada"
+    },
+    "Padrão: normal + perdeu contraste (4)": {
+      "ll": -0.13086682530618285,
+      "fine": 53.44765630596534,
+      "coarse": 56.53402272279011,
+      "ratio": 0.9448679846400718,
+      "median_shift_iqr": -0.820083022924225,
+      "density": "normal",
+      "wavelet": "perdeu contraste"
+    },
+    "Padrão: escureceu + borrou (1)": {
+      "ll": -0.17193876871488628,
+      "fine": 41.26043473572455,
+      "coarse": 52.954104036459775,
+      "ratio": 0.7791735029133164,
+      "median_shift_iqr": -1.1524288273660102,
+      "density": "escureceu",
+      "wavelet": "borrou"
+    },
+    "Padrão: escureceu + perdeu contraste (1)": {
+      "ll": -0.15894834246617784,
+      "fine": 71.46115095770375,
+      "coarse": 69.15608761034663,
+      "ratio": 1.0333313151019297,
+      "median_shift_iqr": -1.0766313122248612,
+      "density": "escureceu",
+      "wavelet": "perdeu contraste"
+    },
+    "Padrão: escuro demais + borrou (1)": {
+      "ll": -0.10644992103014769,
+      "fine": 38.69556338370678,
+      "coarse": 43.85730704042006,
+      "ratio": 0.8823059598265784,
+      "median_shift_iqr": -0.6116475023328048,
+      "density": "escuro demais",
+      "wavelet": "borrou"
+    },
+    "Exemplo 078, 50.0A": {
+      "ll": 0.6422803749504016,
+      "fine": 55.49323463025579,
+      "coarse": 66.95004532274794,
+      "entropy": 100.40600747779304,
+      "ratio": 0.8288752361964509,
+      "density": "claro demais",
+      "median_shift_iqr": 4.94307840513233,
+      "wavelet": "borrou"
+    },
+    "Exemplo 078, 40.0A": {
+      "ll": 0.6413288417201046,
+      "fine": 56.59991442501771,
+      "coarse": 58.45957716803101,
+      "entropy": 99.44247460902648,
+      "ratio": 0.9681889121834041,
+      "density": "claro demais",
+      "median_shift_iqr": 5.197017322180838,
+      "wavelet": "perdeu contraste"
+    },
+    "Exemplo 081, 50.0A": {
+      "ll": 0.38839684697657584,
+      "fine": 89.06506501949043,
+      "coarse": 110.64532665765076,
+      "entropy": 102.87589272264549,
+      "ratio": 0.804960025967187,
+      "density": "claro demais",
+      "median_shift_iqr": 2.6853356308049094,
+      "wavelet": "textura preservada"
+    },
+    "Exemplo 056, 60.0A": {
+      "ll": 0.3589418309355834,
+      "fine": 120.31101514462517,
+      "coarse": 118.7814761741281,
+      "entropy": 103.7819666145201,
+      "ratio": 1.0128769149850845,
+      "density": "clareou",
+      "median_shift_iqr": 2.469453404931573,
+      "wavelet": "textura preservada"
+    },
+    "Exemplo 045, 90.0A": {
+      "ll": 0.34159801095470554,
+      "fine": 182.9037685230885,
+      "coarse": 160.03836262776196,
+      "entropy": 104.01918817697054,
+      "ratio": 1.1428745303306425,
+      "density": "clareou",
+      "median_shift_iqr": 2.1569291132450314,
+      "wavelet": "ruído"
+    },
+    "Exemplo 078, 20.0A": {
+      "ll": 0.28541297089380224,
+      "fine": 109.79904413457542,
+      "coarse": 123.31635335810522,
+      "entropy": 103.72771457449548,
+      "ratio": 0.890385104202067,
+      "density": "clareou",
+      "median_shift_iqr": 1.919087152548579,
+      "wavelet": "textura preservada"
+    },
+    "Exemplo 042, 20.0A": {
+      "ll": 0.25115113612418155,
+      "fine": 130.03640218074028,
+      "coarse": 125.5615224369133,
+      "entropy": 104.200152842626,
+      "ratio": 1.0356389414286955,
+      "density": "clareou",
+      "median_shift_iqr": 1.5619439512495963,
+      "wavelet": "ganhou contraste"
+    },
+    "Exemplo 070, 20.0A": {
+      "ll": 0.23122281257933924,
+      "fine": 102.40846291713692,
+      "coarse": 97.48803904627572,
+      "entropy": 104.01559131265945,
+      "ratio": 1.0504720775902114,
+      "density": "clareou",
+      "median_shift_iqr": 1.632955728100141,
+      "wavelet": "textura preservada"
+    },
+    "Exemplo 031, 70.0A": {
+      "ll": 0.22191812018400586,
+      "fine": 126.65656526325932,
+      "coarse": 147.9181001833893,
+      "entropy": 105.19300767900069,
+      "ratio": 0.8562614386355026,
+      "density": "clareou",
+      "median_shift_iqr": 1.5179485951776384,
+      "wavelet": "borrou"
+    },
+    "Exemplo 059, 0.0A": {
+      "ll": 0.2115186981743717,
+      "fine": 134.83990375052952,
+      "coarse": 148.231970297845,
+      "entropy": 103.66637786103809,
+      "ratio": 0.9096546681501528,
+      "density": "clareou",
+      "median_shift_iqr": 1.3594565829265979,
+      "wavelet": "ganhou contraste"
+    },
+    "Exemplo 060, 90.0A": {
+      "ll": 0.18916885908039113,
+      "fine": 147.6394846345859,
+      "coarse": 173.7600770704584,
+      "entropy": 102.71481170928465,
+      "ratio": 0.8496743735600393,
+      "density": "clareou",
+      "median_shift_iqr": 1.2238892224813331,
+      "wavelet": "borrou"
+    },
+    "Exemplo 058, 0.0A": {
+      "ll": 0.1576651934501387,
+      "fine": 70.57177017702254,
+      "coarse": 67.27435463893175,
+      "entropy": 101.96080361161748,
+      "ratio": 1.0490144506890977,
+      "density": "clareou",
+      "median_shift_iqr": 1.0130892791753192,
+      "wavelet": "perdeu contraste"
+    }
+  }
+}

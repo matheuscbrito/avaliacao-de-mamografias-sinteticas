@@ -1,0 +1,226 @@
+{
+  "brilho": {
+    "-0.3": {
+      "pipeline|energy_pct": 62.211133591765346,
+      "pipeline|entropy_pct": 86.62181353191663,
+      "pipeline|ll": 0.04245087197538451,
+      "sem corte|energy_pct": 99.99999999999979,
+      "sem corte|entropy_pct": 100.00000000000004,
+      "sem corte|ll": -0.03804584129756274
+    },
+    "-0.25": {
+      "pipeline|energy_pct": 75.38919063355446,
+      "pipeline|entropy_pct": 91.04952180444725,
+      "pipeline|ll": 0.05357904518034923,
+      "sem corte|energy_pct": 99.99999999999997,
+      "sem corte|entropy_pct": 100.00000000000006,
+      "sem corte|ll": 0.011954158702437257
+    },
+    "-0.2": {
+      "pipeline|energy_pct": 89.12727116671161,
+      "pipeline|entropy_pct": 95.61304055035426,
+      "pipeline|ll": 0.07752933737009612,
+      "sem corte|energy_pct": 100.0,
+      "sem corte|entropy_pct": 100.00000000000001,
+      "sem corte|ll": 0.061954158702437284
+    },
+    "-0.15": {
+      "pipeline|energy_pct": 98.07015905911523,
+      "pipeline|entropy_pct": 98.9532905942197,
+      "pipeline|ll": 0.1172699147653199,
+      "sem corte|energy_pct": 99.99999999999983,
+      "sem corte|entropy_pct": 100.0,
+      "sem corte|ll": 0.11195415870243729
+    },
+    "-0.1": {
+      "pipeline|energy_pct": 100.902925300344,
+      "pipeline|entropy_pct": 99.91442842343605,
+      "pipeline|ll": 0.162490832878947,
+      "sem corte|energy_pct": 99.99999999999993,
+      "sem corte|entropy_pct": 100.00000000000001,
+      "sem corte|ll": 0.1619541587024373
+    },
+    "-0.05": {
+      "pipeline|energy_pct": 100.94915003276195,
+      "pipeline|entropy_pct": 99.9821747878254,
+      "pipeline|ll": 0.21127613531282774,
+      "sem corte|energy_pct": 99.99999999999996,
+      "sem corte|entropy_pct": 99.99999999999999,
+      "sem corte|ll": 0.2119541587024373
+    },
+    "0.0": {
+      "pipeline|energy_pct": 100.0,
+      "pipeline|entropy_pct": 100.0,
+      "pipeline|ll": 0.26061464912078275,
+      "sem corte|energy_pct": 100.0,
+      "sem corte|entropy_pct": 100.0,
+      "sem corte|ll": 0.2619541587024373
+    },
+    "0.05": {
+      "pipeline|energy_pct": 98.31183085292211,
+      "pipeline|entropy_pct": 100.02055720656787,
+      "pipeline|ll": 0.3097998829475742,
+      "sem corte|energy_pct": 99.99999999999986,
+      "sem corte|entropy_pct": 100.00000000000003,
+      "sem corte|ll": 0.3119541587024373
+    },
+    "0.1": {
+      "pipeline|energy_pct": 95.81784033507192,
+      "pipeline|entropy_pct": 100.04950664578904,
+      "pipeline|ll": 0.35880417217074223,
+      "sem corte|energy_pct": 99.99999999999977,
+      "sem corte|entropy_pct": 100.00000000000006,
+      "sem corte|ll": 0.36195415870243736
+    },
+    "0.15": {
+      "pipeline|energy_pct": 92.87811442994594,
+      "pipeline|entropy_pct": 100.0961614471912,
+      "pipeline|ll": 0.40761302838725416,
+      "sem corte|energy_pct": 99.99999999999973,
+      "sem corte|entropy_pct": 100.00000000000006,
+      "sem corte|ll": 0.41195415870243735
+    },
+    "0.2": {
+      "pipeline|energy_pct": 89.59216414241742,
+      "pipeline|entropy_pct": 100.15870391050815,
+      "pipeline|ll": 0.45621046331860077,
+      "sem corte|energy_pct": 99.99999999999996,
+      "sem corte|entropy_pct": 100.00000000000004,
+      "sem corte|ll": 0.46195415870243733
+    },
+    "0.25": {
+      "pipeline|energy_pct": 85.87788717956926,
+      "pipeline|entropy_pct": 100.22442458451958,
+      "pipeline|ll": 0.5045849479192392,
+      "sem corte|energy_pct": 99.99999999999967,
+      "sem corte|entropy_pct": 100.00000000000006,
+      "sem corte|ll": 0.5119541587024373
+    },
+    "0.3": {
+      "pipeline|energy_pct": 81.78035192854956,
+      "pipeline|entropy_pct": 100.30488997917713,
+      "pipeline|ll": 0.552866911518566,
+      "sem corte|energy_pct": 99.99999999999962,
+      "sem corte|entropy_pct": 100.00000000000004,
+      "sem corte|ll": 0.5619541587024375
+    }
+  },
+  "contraste": {
+    "0.25": {
+      "pipeline|energy_pct": 6.4271065501131535,
+      "pipeline|entropy_pct": 99.99846890641295,
+      "pipeline|ll": 0.2265446775045146,
+      "sem corte|energy_pct": 6.249999999999996,
+      "sem corte|entropy_pct": 100.00000000000036,
+      "sem corte|ll": 0.2265446775045146
+    },
+    "0.5": {
+      "pipeline|energy_pct": 25.708426200452614,
+      "pipeline|entropy_pct": 99.99846890641292,
+      "pipeline|ll": 0.2361297229205231,
+      "sem corte|energy_pct": 24.999999999999936,
+      "sem corte|entropy_pct": 100.00000000000018,
+      "sem corte|ll": 0.2361297229205231
+    },
+    "0.75": {
+      "pipeline|energy_pct": 57.81519389056588,
+      "pipeline|entropy_pct": 99.99791829926282,
+      "pipeline|ll": 0.2481483123429146,
+      "sem corte|energy_pct": 56.24999999999997,
+      "sem corte|entropy_pct": 100.00000000000007,
+      "sem corte|ll": 0.2481483123429146
+    },
+    "1.0": {
+      "pipeline|energy_pct": 100.0,
+      "pipeline|entropy_pct": 100.0,
+      "pipeline|ll": 0.26061464912078275,
+      "sem corte|energy_pct": 100.0,
+      "sem corte|entropy_pct": 100.0,
+      "sem corte|ll": 0.2619541587024373
+    },
+    "1.25": {
+      "pipeline|energy_pct": 143.86485828093984,
+      "pipeline|entropy_pct": 100.06219305175046,
+      "pipeline|ll": 0.2700762452943051,
+      "sem corte|energy_pct": 156.2500000000001,
+      "sem corte|entropy_pct": 100.0,
+      "sem corte|ll": 0.2757600050619601
+    },
+    "1.5": {
+      "pipeline|energy_pct": 187.46304483285383,
+      "pipeline|entropy_pct": 100.16649802895343,
+      "pipeline|ll": 0.2779614551660083,
+      "sem corte|energy_pct": 225.0000000000001,
+      "sem corte|entropy_pct": 100.0,
+      "sem corte|ll": 0.28500216577665727
+    },
+    "2.0": {
+      "pipeline|energy_pct": 269.3561049548297,
+      "pipeline|entropy_pct": 100.22596432425806,
+      "pipeline|ll": 0.29099018874577504,
+      "sem corte|energy_pct": 399.99999999999994,
+      "sem corte|entropy_pct": 99.99999999999996,
+      "sem corte|ll": 0.30107660375797696
+    }
+  },
+  "lavagem": {
+    "0.0": {
+      "pipeline|energy_pct": 100.0,
+      "pipeline|entropy_pct": 100.0,
+      "pipeline|ll": 0.26061464912078275,
+      "sem corte|energy_pct": 100.0,
+      "sem corte|entropy_pct": 100.0,
+      "sem corte|ll": 0.2619541587024373
+    },
+    "0.25": {
+      "pipeline|energy_pct": 56.29583184103502,
+      "pipeline|entropy_pct": 100.01380106506312,
+      "pipeline|ll": 0.4452880162405216,
+      "sem corte|energy_pct": 56.25546074417283,
+      "sem corte|entropy_pct": 100.0093546029806,
+      "sem corte|ll": 0.4462926484267626
+    },
+    "0.5": {
+      "pipeline|energy_pct": 25.365975105480295,
+      "pipeline|entropy_pct": 100.03928661564996,
+      "pipeline|ll": 0.6299613833602605,
+      "sem corte|energy_pct": 25.352260242581437,
+      "sem corte|entropy_pct": 100.02101574258255,
+      "sem corte|ll": 0.6306311381510878
+    },
+    "0.75": {
+      "pipeline|energy_pct": 7.268935541352036,
+      "pipeline|entropy_pct": 99.7212253077065,
+      "pipeline|ll": 0.8146347504799994,
+      "sem corte|energy_pct": 7.265225843332679,
+      "sem corte|entropy_pct": 99.701886296252,
+      "sem corte|ll": 0.814969627875413
+    }
+  },
+  "real_ll_shift_median": {
+    "dgen": -0.04957733838432285,
+    "dsr": -0.07223180137296606
+  },
+  "real_highlight": [
+    [
+      "078",
+      0.641
+    ],
+    [
+      "078",
+      0.642
+    ],
+    [
+      "081",
+      0.388
+    ],
+    [
+      "056",
+      0.359
+    ],
+    [
+      "045",
+      0.342
+    ]
+  ]
+}
