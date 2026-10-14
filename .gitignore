@@ -5,6 +5,10 @@ __pycache__/
 .DS_Store
 node_modules/
 
+# dados clínicos locais e resultados de execução
+data/
+outputs/
+
 # datasets locais (grandes, não versionar)
 2d_only_1000_images/
 data/

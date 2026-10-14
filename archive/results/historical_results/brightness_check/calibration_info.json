@@ -1,0 +1,13 @@
+{
+    "Q1_pixels": -0.16316324472427368,
+    "Q3_pixels": 0.22621163725852966,
+    "IQR_pixels": 0.38937488198280334,
+    "clip_low": -1.3312878906726837,
+    "clip_high": 1.3943362832069397,
+    "Q1_means": -0.08892230693889824,
+    "Q3_means": 0.22557061941563714,
+    "IQR_means": 0.3144929263545354,
+    "threshold_hard_reject_diff": 0.6289858527090708,
+    "threshold_manual_review_diff": 0.3144929263545354,
+    "threshold_hard_reject_sat_percent": 15.0
+}

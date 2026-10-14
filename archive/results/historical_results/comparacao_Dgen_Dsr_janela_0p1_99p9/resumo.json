@@ -1,0 +1,23 @@
+{
+  "shared_pairs": 100,
+  "valid_pairs": 37,
+  "invalid_pairs": 63,
+  "clip_interval": [
+    -0.5525381565093994,
+    1.9248595237731934
+  ],
+  "clip_percentiles": [
+    0.1,
+    99.9
+  ],
+  "levels": 32,
+  "dgen_lower_mae": 2,
+  "dsr_lower_mae": 35,
+  "dgen_closer_contrast": 15,
+  "dsr_closer_contrast": 22,
+  "median_dgen_contrast": 2.680554483104049,
+  "median_dsr_contrast": 2.3995207050074416,
+  "median_original_contrast": 4.130236020252106,
+  "median_dgen_mae": 0.37807739956676717,
+  "median_dsr_mae": 0.15142764455847363
+}

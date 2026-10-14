@@ -1,54 +1,26 @@
-# Avaliação de textura em CT pulmonar sintética
+# Avaliação de CT pulmonar sintética
 
-Este repositório compara duas gerações sintéticas para os mesmos cortes de CT
-pulmonar: **Dgen** e **Dsr**. A análise usa GLCM e wavelet dentro da região do
-pulmão.
+Este repositório compara CTs pulmonares reais com gerações sintéticas Dgen e Dsr. A organização separa o trabalho em duas frentes:
 
-## Organização
+- **Avaliador de textura**: reunirá GLCM, Wavelet e NEXP em uma integração futura.
+- **Filtro de brilho excessivo**: controle de qualidade para identificar pulmões artificialmente claros antes da análise de textura.
 
-- `dados/Dgen/`: conjunto anterior, com original, sintética e máscara.
-- `dados/Dsr/`: nova geração; contém os mesmos originais e suas
-  sintéticas, mas não traz máscaras próprias.
-- `glcm/`: código da análise GLCM e dashboard.
-- `wavelet/`: código da análise wavelet e dashboard.
-- `resultados/`: tabelas da comparação entre as duas gerações.
-- `slides/`: apresentação atual e imagens para inserir em novos slides.
-- `documentacao/`: descrição do framework.
+## Estrutura atual
 
-## Comparação Dgen × Dsr
+- `frameworks/texture_evaluator/glcm/`: módulo GLCM ativo, com Robust Scaler, régua compartilhada de 32 tons e execução por manifesto.
+- `wavelet/`: implementação Wavelet já existente; foi preservada sem alteração e será integrada ao avaliador principal em etapa posterior.
+- `docs/protocols/`: decisões metodológicas oficiais.
+- `docs/contracts/`: contrato de integração para GLCM, Wavelet, NEXP e filtro de brilho.
+- `resultados/comparacao_Dgen_Dsr_wavelet/`: resultados Wavelet atuais.
+- `archive/`: código, resultados, figuras, slides e documentos históricos, separados por grupo.
+- `dados/`: conjunto local original; requer tratamento apropriado antes de qualquer publicação.
 
-Rode a partir de `glcm/`:
+## Protocolo GLCM vigente
 
-```bash
-../.venv/bin/python -m src.compare_generations \
-  --dgen-dir ../dados/Dgen \
-  --dsr-dir ../dados/Dsr \
-  --output-dir ../resultados/comparacao_Dgen_Dsr
-```
+Para 37 pares válidos, a análise usa a ROI dos dois pulmões erodida com raio 2. A régua de 32 tons é calibrada somente com pixels das imagens reais, por cercas externas de Tukey (`k = 3,0`), e reutilizada sem mudança para a imagem sintética do mesmo par. Contraste e energia são calculados somente entre pixels vizinhos que permanecem dentro da ROI erodida.
 
-O script só reutiliza as máscaras Dgen após confirmar que os 100 cortes
-originais são idênticos em Dgen e Dsr. Ele seleciona os 37 cortes com ROI
-pulmonar válida pela regra operacional do MVP e grava as razões de exclusão
-dos demais 63. As montagens visuais aprovadas ficam em `slides/imagens/`.
+Detalhes de execução e interpretação estão em [`frameworks/texture_evaluator/glcm/README.md`](frameworks/texture_evaluator/glcm/README.md).
 
-## Resultado inicial
+## Nota sobre interpretação
 
-No protocolo GLCM de 32 tons e intervalo global calculado nas originais:
-
-- Dsr teve menor erro absoluto de intensidade na ROI em 35 dos 37 pares;
-- a mediana do MAE caiu de 0,378 (Dgen) para 0,151 (Dsr);
-- visualmente, Dsr preserva vasos e variações do parênquima que Dgen tende a
-  apagar.
-
-Isso não equivale a uma validação clínica. Dsr ainda tem contraste GLCM abaixo
-do original na mediana e deve ser avaliado também com wavelet e as demais
-métricas antes de uma decisão de uso.
-
-## Resultado wavelet
-
-A mesma comparação com features wavelet está em
-`resultados/comparacao_Dgen_Dsr_wavelet/resumo.md`. O Dsr ficou mais próximo
-da original em energia (26 de 37 pares) e em entropia (31 de 37) e acompanha a
-textura de cada corte (Spearman ≈ 0,8). Já a energia do Dgen tem correlação
-negativa com a original. As duas gerações perdem em torno de 40% da energia de
-alta frequência.
+Resultados de textura e ROC/AUC mostram o quanto imagens reais e sintéticas são distinguíveis. Uma AUC alta detecta diferença entre os grupos; não é, isoladamente, validação de qualidade clínica da síntese.
