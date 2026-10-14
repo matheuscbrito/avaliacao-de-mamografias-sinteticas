@@ -4,7 +4,7 @@ import argparse, csv, json
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
-from wavelet.src.load_data import discover_cases
+from wavelet.src.load_data import CasePaths, discover_cases
 from wavelet.src.validate_cases import ValidCase, validate_case
 from wavelet.src.density_features import reference_interval
 from wavelet.src.wavelet_features_fullimage import wavelet_energy_entropy_fullimage
@@ -13,10 +13,13 @@ from frameworks.texture_evaluator.glcm.src import calibrate_robust_scale, extrac
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--data-dir", type=Path, required=True, help="Pasta com original, _generate e _mask")
+    p.add_argument("--data-dir", type=Path, required=True, help="Pasta com original e _generate")
+    p.add_argument("--mask-dir", type=Path, help="Pasta das máscaras; obrigatória para Dsr")
     p.add_argument("--output-dir", type=Path, required=True); p.add_argument("--preview-limit", type=int, default=12)
     a = p.parse_args(); valid = []
     for paths in discover_cases(a.data_dir):
+        if a.mask_dir:
+            paths = CasePaths(paths.case_id, paths.original, paths.synthetic, a.mask_dir / f"{paths.case_id}_mask.tiff")
         result = validate_case(paths, erosion_radius=2)
         if isinstance(result, ValidCase): valid.append(result)
     if not valid: raise RuntimeError("nenhum par válido")
