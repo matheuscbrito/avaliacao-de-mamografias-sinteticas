@@ -6,7 +6,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from wavelet.src.load_data import CasePaths, discover_cases
 from wavelet.src.validate_cases import ValidCase, validate_case
-from wavelet.src.density_features import reference_interval
+from types import SimpleNamespace
+from wavelet.src.density_features import density_features, density_limits, density_shift, density_status, reference_interval
+from wavelet.src.densidade_wavelet import wavelet_verdict
+from wavelet.src.wavelet_diagnostico import raw_readings, relative
 from wavelet.src.wavelet_features_fullimage import wavelet_energy_entropy_fullimage
 from wavelet.src.wavelet_brightness import ll_mean
 from frameworks.texture_evaluator.glcm.src import calibrate_robust_scale, extract_glcm
@@ -26,6 +29,9 @@ def main() -> None:
     if not valid: raise RuntimeError("nenhum par válido")
     scale = calibrate_robust_scale(np.concatenate([c.original[c.lung_mask] for c in valid]), tukey_k=3, levels=32)
     interval = reference_interval([(c.original, c.lung_mask) for c in valid])
+    # eixo de densidade da Wavelet: segunda métrica de brilho, lado a lado com Δμ/Sat31 (convivência ainda em aberto)
+    limits = density_limits([density_features(c.original, c.lung_mask, interval) for c in valid])
+    settings = SimpleNamespace(wavelet='haar', min_tissue=.9)
     means = np.array([c.original[c.lung_mask].mean() for c in valid]); mean_iqr = float(np.diff(np.percentile(means, [25, 75]))[0])
     rows=[]; previews=a.output_dir/"previews"; previews.mkdir(parents=True, exist_ok=True)
     for n, c in enumerate(valid):
@@ -33,8 +39,13 @@ def main() -> None:
         real_w=wavelet_energy_entropy_fullimage(c.original,c.lung_mask,interval['p1'],interval['p99'],'haar',2)
         syn_w=wavelet_energy_entropy_fullimage(c.synthetic,c.lung_mask,interval['p1'],interval['p99'],'haar',2)
         delta=float(c.synthetic[c.lung_mask].mean()-c.original[c.lung_mask].mean()); sat=syn_g['saturation_tone_31_pct']
+        dens_real, dens_syn = density_features(c.original,c.lung_mask,interval), density_features(c.synthetic,c.lung_mask,interval)
+        # veredito da Wavelet: energia fina/grossa da sintética em % da original (limites exploratórios)
+        reading = relative(raw_readings(c.synthetic,c.lung_mask,interval,settings), raw_readings(c.original,c.lung_mask,interval,settings))
         status='hard_reject' if abs(delta)>2*mean_iqr or sat>15 else 'manual_review' if abs(delta)>mean_iqr else 'approved'
         row={'case_id':c.paths.case_id,'brightness_status':status,'delta_mu':delta,'sat31_pct':sat,
+             'density_status':density_status(dens_syn,dens_real,limits),'density_median_shift_iqr':density_shift(dens_syn,dens_real,limits)['median_shift_iqr'],
+             'wavelet_verdict':wavelet_verdict(reading),'wavelet_fine_pct':reading['fine'],'wavelet_coarse_pct':reading['coarse'],'wavelet_ratio':reading['ratio'],
              'glcm_contrast_real':real_g['glcm_contrast'],'glcm_contrast_synthetic':syn_g['glcm_contrast'],
              'glcm_energy_real':real_g['glcm_energy'],'glcm_energy_synthetic':syn_g['glcm_energy'],
              'wavelet_energy_real':real_w['energy'],'wavelet_energy_synthetic':syn_w['energy'],
@@ -47,10 +58,10 @@ def main() -> None:
             for axis,img,title in zip(ax[:2],(c.original,c.synthetic),('Real','Sintética')):
                 axis.imshow(img,cmap='gray',vmin=interval['p1'],vmax=interval['p99']); axis.contour(c.lung_mask,[.5],colors='#12a57a'); axis.set_title(title); axis.axis('off')
             ax[2].imshow(c.lung_mask,cmap='gray'); ax[2].set_title('ROI erodida'); ax[2].axis('off')
-            fig.suptitle(f"{c.paths.case_id} | {status} | Δμ={delta:.3f} | Sat31={sat:.1f}% | LL={row['wavelet_ll_synthetic']:.3f}",fontsize=9)
+            fig.suptitle(f"{c.paths.case_id} | {status} | Δμ={delta:.3f} | Sat31={sat:.1f}% | densidade={row['density_status']} | wavelet={row['wavelet_verdict']}",fontsize=9)
             fig.tight_layout(); fig.savefig(previews/f'{n:02d}.png',dpi=150); plt.close(fig)
     with (a.output_dir/'mvp_results.csv').open('w',newline='',encoding='utf-8') as f:
         w=csv.DictWriter(f,fieldnames=rows[0].keys()); w.writeheader(); w.writerows(rows)
-    (a.output_dir/'mvp_protocol.json').write_text(json.dumps({'valid_pairs':len(valid),'glcm_scale':scale.as_dict(),'wavelet_interval':interval,'third_metric':'reserved'},indent=2),encoding='utf-8')
+    (a.output_dir/'mvp_protocol.json').write_text(json.dumps({'valid_pairs':len(valid),'glcm_scale':scale.as_dict(),'wavelet_interval':interval,'density_limits':limits,'third_metric':'reserved'},indent=2),encoding='utf-8')
     generate_report(rows, a.output_dir)
 if __name__=='__main__': main()
