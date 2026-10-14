@@ -1,9 +1,9 @@
 # Avaliador de textura
 
-Este é o espaço do framework principal. Ele deverá reunir três métricas calculadas na mesma coorte, nos mesmos pares e na mesma ROI pulmonar erodida:
+O MVP reúne GLCM e Wavelet nos mesmos pares e na mesma ROI erodida. Ele salva tabela única e prévias visuais do par real/sintético/ROI.
 
-- `glcm/`: implementado e documentado neste repositório.
-- Wavelet: reservado para integração futura.
-- NEXP: reservado para integração futura.
+```bash
+python -m frameworks.texture_evaluator.run_mvp --data-dir dados/Dsr --output-dir outputs/mvp
+```
 
-O framework não deve aceitar que cada métrica escolha seus próprios casos, máscara, escala ou pré-processamento. A orquestração futura deve produzir um manifesto de casos válidos e compartilhar as ROIs com os três módulos.
+GLCM mede contraste e energia. Wavelet mede energia e entropia de detalhe; LL é registrada para brilho. A terceira métrica está reservada, sem implementação especulativa.
