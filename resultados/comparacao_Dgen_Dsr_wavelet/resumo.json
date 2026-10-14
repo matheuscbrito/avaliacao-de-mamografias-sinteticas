@@ -10,6 +10,8 @@
   "level": 2,
   "min_tissue": 0.9,
   "pair_iqr_threshold": 1.0,
+  "dgen_dir": "../../dados/Dgen",
+  "dsr_dir": "../../dados/Dsr",
   "energy": {
     "median_original": 0.013079367005529715,
     "median_dgen": 0.007283597927525189,
@@ -49,6 +51,62 @@
       "approved": 9,
       "approved_with_observation": 0,
       "manual_review": 28,
+      "reject": 0
+    }
+  },
+  "density": {
+    "reference_interval": {
+      "p1": -0.44059285521507263,
+      "p50": -0.009846887551248074,
+      "p99": 1.5841565132141113
+    },
+    "limits": {
+      "frac_bright": 0.03389538554784724,
+      "frac_dark": 0.005289776539195953,
+      "lung_median": 0.146634625327029
+    },
+    "status_counts": {
+      "dgen": {
+        "too_bright": 3,
+        "too_dark": 0,
+        "brighter": 9,
+        "darker": 5,
+        "ok": 20
+      },
+      "dsr": {
+        "too_bright": 0,
+        "too_dark": 1,
+        "brighter": 0,
+        "darker": 2,
+        "ok": 34
+      }
+    },
+    "median_shift_iqr": {
+      "dgen": -0.3157176885938284,
+      "dsr": -0.4923958739867757
+    },
+    "max_frac_bright": {
+      "original": 0.032662346023434485,
+      "dgen": 0.3449694103130944,
+      "dsr": 0.01058151512313887
+    },
+    "median_lung_median": {
+      "original": 0.2175480812706715,
+      "dgen": 0.2075101553864651,
+      "dsr": 0.1447777917690221
+    }
+  },
+  "status_counts_with_density": {
+    "dgen": {
+      "approved": 5,
+      "approved_with_observation": 0,
+      "manual_review": 32,
+      "reject": 0
+    },
+    "dsr": {
+      "approved": 8,
+      "approved_with_observation": 0,
+      "manual_review": 29,
       "reject": 0
     }
   },

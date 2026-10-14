@@ -1,0 +1,86 @@
+{
+  "block_px": 16,
+  "floor": {
+    "fine": 0.000441050430480952,
+    "coarse": 0.0024748018755531087
+  },
+  "medianas": {
+    "Só brilho (+25%)": {
+      "area_textura preservada": 0.7636363636363637,
+      "area_borrou": 0.03225806451612903,
+      "area_perdeu contraste": 0.07272727272727272,
+      "area_estourou": 0.12903225806451613,
+      "area_ruído": 0.0,
+      "area_ganhou contraste": 0.0,
+      "area_mais_claro": 1.0,
+      "area_mais_escuro": 0.0,
+      "n_blocos": 55.0,
+      "correlacao_textura": 0.9850710445468511,
+      "correlacao_brilho": 0.9987752602571952
+    },
+    "Lavagem (40% branco)": {
+      "area_textura preservada": 0.0,
+      "area_borrou": 0.013888888888888888,
+      "area_perdeu contraste": 0.8,
+      "area_estourou": 0.12903225806451613,
+      "area_ruído": 0.03571428571428571,
+      "area_ganhou contraste": 0.0,
+      "area_mais_claro": 1.0,
+      "area_mais_escuro": 0.0,
+      "n_blocos": 55.0,
+      "correlacao_textura": 0.9095652173913044,
+      "correlacao_brilho": 0.9952628502876129
+    },
+    "Brilho + borrado (+25%, σ=1)": {
+      "area_textura preservada": 0.0,
+      "area_borrou": 0.9166666666666666,
+      "area_perdeu contraste": 0.07142857142857142,
+      "area_estourou": 0.0,
+      "area_ruído": 0.0,
+      "area_ganhou contraste": 0.0,
+      "area_mais_claro": 1.0,
+      "area_mais_escuro": 0.0,
+      "n_blocos": 55.0,
+      "correlacao_textura": 0.947886958776251,
+      "correlacao_brilho": 0.9974747474747476
+    },
+    "Lavagem só em metade do pulmão": {
+      "area_textura preservada": 0.41379310344827586,
+      "area_borrou": 0.05194805194805195,
+      "area_perdeu contraste": 0.35185185185185186,
+      "area_estourou": 0.07142857142857142,
+      "area_ruído": 0.075,
+      "area_ganhou contraste": 0.0,
+      "area_mais_claro": 0.5396825396825397,
+      "area_mais_escuro": 0.0,
+      "n_blocos": 55.0,
+      "correlacao_textura": 0.4313644688644688,
+      "correlacao_brilho": 0.6676767676767678
+    },
+    "Dataset padrão (mediana)": {
+      "area_textura preservada": 0.07017543859649122,
+      "area_borrou": 0.6140350877192983,
+      "area_perdeu contraste": 0.16666666666666666,
+      "area_estourou": 0.09090909090909091,
+      "area_ruído": 0.0,
+      "area_ganhou contraste": 0.0,
+      "area_mais_claro": 0.0,
+      "area_mais_escuro": 0.0,
+      "correlacao_textura": 0.8723712135828672,
+      "correlacao_brilho": 0.9611756664388243
+    },
+    "Exemplos claros (mediana)": {
+      "area_textura preservada": 0.0810064935064935,
+      "area_borrou": 0.5662593984962406,
+      "area_perdeu contraste": 0.06349206349206349,
+      "area_estourou": 0.09090909090909091,
+      "area_ruído": 0.08552631578947367,
+      "area_ganhou contraste": 0.061363636363636356,
+      "area_mais_claro": 0.930976430976431,
+      "area_mais_escuro": 0.0,
+      "n_blocos": 55.0,
+      "correlacao_textura": 0.315521087613631,
+      "correlacao_brilho": 0.39599639118695384
+    }
+  }
+}

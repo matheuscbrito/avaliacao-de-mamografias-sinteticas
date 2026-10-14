@@ -1,8 +1,6 @@
 """Dashboard Streamlit: lê CSVs prontos, sem recalcular a pipeline."""
 from __future__ import annotations
 
-import csv
-import html
 import sys
 from pathlib import Path
 
@@ -13,48 +11,9 @@ import streamlit as st
 PROJECT = Path(__file__).resolve().parents[1]
 OUTPUT = PROJECT / "outputs"
 sys.path.insert(0, str(PROJECT))
+sys.path.insert(0, str(PROJECT / "dashboard"))
+from common import FEATURES, DECISIONS, as_float, decision_card, normalised, percentage, plain_number, read_csv  # noqa: E402
 from src.load_data import load_image  # noqa: E402
-
-FEATURES = {"energy": "Energia", "entropy": "Entropia"}
-DECISIONS = {
-    "approved": ("Aprovada", "#16803c", "Pode entrar no conjunto de data augmentation."),
-    "approved_with_observation": ("Aprovada com observação", "#277da1", "Caso raro, mas compatível com a original."),
-    "manual_review": ("Revisão manual", "#b76e00", "Ainda não entra no augmentation: vale olhar este par com calma."),
-    "reject": ("Não aprovada", "#c73e1d", "Não deve entrar no data augmentation."),
-}
-
-
-def read_csv(name: str) -> list[dict]:
-    with (OUTPUT / name).open(encoding="utf-8", newline="") as file:
-        return list(csv.DictReader(file))
-
-
-def as_float(value: str | float) -> float:
-    return float(value)
-
-
-def normalised(image: np.ndarray) -> np.ndarray:
-    low, high = np.percentile(image, (1, 99))
-    return np.clip((image - low) / max(high - low, 1e-12), 0, 1)
-
-
-def percentage(value: float) -> str:
-    return f"{value * 100:.1f}%"
-
-
-def plain_number(value: float) -> str:
-    return f"{value:.4f}" if abs(value) < 0.1 else f"{value:.2f}"
-
-
-def decision_card(result: dict) -> None:
-    title, colour, meaning = DECISIONS[result["status"]]
-    st.markdown(
-        f"""<div style="border-left:7px solid {colour};background:#f8f9fb;border-radius:8px;padding:16px 18px;margin:4px 0 18px">
-        <div style="font-size:1.15rem;font-weight:700;color:{colour}">{title}</div>
-        <div style="margin-top:5px">{html.escape(meaning)}</div>
-        <div style="margin-top:7px;color:#555">Motivo: {html.escape(result["decision_reason"])}</div></div>""",
-        unsafe_allow_html=True,
-    )
 
 
 def metric_interpretation(feature: str, result: dict, stats: dict) -> None:
@@ -111,10 +70,11 @@ st.caption("Wavelet · Energia e entropia das sub-bandas de detalhe · O painel 
 required = ["case_validation.csv", "features_wavelet.csv", "reference_originals.csv", "comparison_results.csv"]
 if not all((OUTPUT / name).exists() for name in required):
     st.error("Ainda não há resultados. Execute a pipeline antes de abrir o painel.")
-    st.code("python -m src.run_pipeline --data-dir /caminho/para/o/dataset", language="bash")
+    st.code("python -m src.run_pipeline_fullimage --data-dir ../dados/Dgen --output-dir outputs", language="bash")
+    st.info("A comparação Dgen × Dsr já está calculada: abra a página **Dgen x Dsr** no menu lateral.")
     st.stop()
 
-validation, features, reference, comparisons = (read_csv(name) for name in required)
+validation, features, reference, comparisons = (read_csv(OUTPUT / name) for name in required)
 accepted = [row for row in validation if row["status"] == "accepted"]
 reference_by_feature = {row["feature"]: row for row in reference}
 result_by_case = {row["case_id"]: row for row in comparisons}
@@ -140,7 +100,7 @@ images = st.columns(3)
 images[0].image(normalised(original), caption="1. CT original que condicionou a geração", clamp=True)
 images[1].image(normalised(synthetic), caption="2. CT sintética que queremos avaliar", clamp=True)
 images[2].image((np.isclose(mask, 1.0)).astype(np.uint8) * 255, caption="3. Máscara: região usada para medir a textura", clamp=True)
-decision_card(result)
+decision_card(result["status"], result["decision_reason"])
 
 st.subheader("As duas comparações", anchor=False)
 st.caption("Uma imagem só é rejeitada automaticamente se falhar nas duas perguntas abaixo.")

@@ -1,6 +1,6 @@
 """Compara as gerações Dgen e Dsr com as features wavelet (método de imagem inteira).
 
-Espelha `glcm/src/compare_generations.py`: o Dsr não traz máscaras próprias, então
+Espelha `archive/legacy/glcm_mvp/src/compare_generations.py`: o Dsr não traz máscaras próprias, então
 as máscaras do Dgen são reutilizadas depois de confirmar que as originais dos dois
 conjuntos são idênticas. Os mesmos cortes passam pelo filtro de ROI do MVP, pela
 referência construída só com originais aceitas e pela classificação inicial do
@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import spearmanr, wilcoxon
 
-from .build_reference import FEATURES, build_reference
+from .build_reference import FEATURES, build_reference, reference_rows
 from .compare_images import compare_case
+from .density_features import DENSITY_FEATURES, DENSITY_STATUSES, density_features, density_limits, density_shift, density_status, reference_interval
 from .load_data import CasePaths, load_image
 from .run_pipeline import write_csv
 from .validate_cases import RejectedCase, validate_case
@@ -132,8 +134,8 @@ def main() -> None:
             continue
         valid.append((result, dsr))
 
-    pixels = np.concatenate([case.original[case.lung_mask] for case, _ in valid])
-    clip_low, clip_high = (float(value) for value in np.percentile(pixels, (1, 99)))
+    interval = reference_interval([(case.original, case.lung_mask) for case, _ in valid])
+    clip_low, clip_high = interval["p1"], interval["p99"]
 
     def features(image: np.ndarray, mask: np.ndarray) -> dict[str, float]:
         return wavelet_energy_entropy_fullimage(image, mask, clip_low, clip_high, args.wavelet, args.level, args.min_tissue)
@@ -143,6 +145,15 @@ def main() -> None:
         for case, dsr in valid
     ]
     reference = build_reference([original for _, original, _ in metrics])
+    density = {
+        case.paths.case_id: {
+            "original": density_features(case.original, case.lung_mask, interval),
+            "dgen": density_features(case.synthetic, case.lung_mask, interval),
+            "dsr": density_features(dsr, case.lung_mask, interval),
+        }
+        for case, dsr in valid
+    }
+    limits = density_limits([item["original"] for item in density.values()])
     levels = int(metrics[0][1]["levels_used"])
 
     rows: list[dict] = []
@@ -153,11 +164,24 @@ def main() -> None:
             for generation in GENERATIONS:
                 row[f"{generation}_{feature}"] = generated[generation][feature]
                 row[f"{generation}_{feature}_error"] = abs(generated[generation][feature] - original[feature])
+        for feature in DENSITY_FEATURES:
+            for image_name in ("original", *GENERATIONS):
+                row[f"{image_name}_{feature}"] = density[case_id][image_name][feature]
         for generation in GENERATIONS:
             decision = compare_case(case_id, original, generated[generation], reference, args.pair_iqr_threshold)
             row[f"{generation}_status"] = decision["status"]
+            row[f"{generation}_decision_reason"] = decision["decision_reason"]
             for feature in FEATURES:
                 row[f"{generation}_pair_distance_{feature}_iqr"] = decision[f"pair_distance_{feature}_iqr"]
+                row[f"{generation}_relative_delta_{feature}"] = decision[f"relative_delta_{feature}"]
+                row[f"{generation}_{feature}_outside_reference"] = decision[f"synthetic_{feature}_outside_reference"]
+            # guarda de densidade: não muda o status da textura, só escala para revisão
+            row[f"{generation}_density_status"] = density_status(density[case_id][generation], density[case_id]["original"], limits, args.pair_iqr_threshold)
+            for name, value in density_shift(density[case_id][generation], density[case_id]["original"], limits).items():
+                row[f"{generation}_{name}"] = value
+            row[f"{generation}_status_with_density"] = (
+                "manual_review" if row[f"{generation}_density_status"] != "ok" and decision["status"].startswith("approved") else decision["status"]
+            )
             for scale, key in scale_keys(levels):
                 for band in BANDS:
                     ratio = generated[generation][f"energy_{key}_{band}"] / max(original[f"energy_{key}_{band}"], 1e-12)
@@ -168,6 +192,9 @@ def main() -> None:
         "shared_pairs": len(shared), "valid_pairs": len(rows), "invalid_pairs": len(rejected),
         "clip_interval": [clip_low, clip_high], "wavelet": args.wavelet, "level": levels,
         "min_tissue": args.min_tissue, "pair_iqr_threshold": args.pair_iqr_threshold,
+        # relativos à pasta de saída, para o dashboard achar as imagens em qualquer máquina
+        "dgen_dir": os.path.relpath(args.dgen_dir.resolve(), args.output_dir.resolve()),
+        "dsr_dir": os.path.relpath(args.dsr_dir.resolve(), args.output_dir.resolve()),
     }
     for feature in FEATURES:
         dgen_errors = [row[f"dgen_{feature}_error"] for row in rows]
@@ -186,6 +213,14 @@ def main() -> None:
             **{f"spearman_original_{generation}": float(spearmanr([row[f"original_{feature}"] for row in rows], [row[f"{generation}_{feature}"] for row in rows])[0]) for generation in GENERATIONS},
         }
     summary["status_counts"] = {generation: {status: sum(row[f"{generation}_status"] == status for row in rows) for status in STATUSES} for generation in GENERATIONS}
+    summary["density"] = {
+        "reference_interval": interval, "limits": limits,
+        "status_counts": {generation: {status: sum(row[f"{generation}_density_status"] == status for row in rows) for status in DENSITY_STATUSES} for generation in GENERATIONS},
+        "median_shift_iqr": {generation: float(np.median([row[f"{generation}_median_shift_iqr"] for row in rows])) for generation in GENERATIONS},
+        "max_frac_bright": {name: float(max(row[f"{name}_frac_bright"] for row in rows)) for name in ("original", *GENERATIONS)},
+        "median_lung_median": {name: float(np.median([row[f"{name}_lung_median"] for row in rows])) for name in ("original", *GENERATIONS)},
+    }
+    summary["status_counts_with_density"] = {generation: {status: sum(row[f"{generation}_status_with_density"] == status for row in rows) for status in STATUSES} for generation in GENERATIONS}
     summary["median_log2_energy_ratio"] = {
         f"s{scale}_{band}": {generation: float(np.median([row[f"log2_energy_ratio_{generation}_s{scale}_{band}"] for row in rows])) for generation in GENERATIONS}
         for scale, _ in sorted(scale_keys(levels)) for band in BANDS
@@ -195,6 +230,7 @@ def main() -> None:
     figures.mkdir(parents=True, exist_ok=True)
     write_csv(args.output_dir / "metricas_por_caso.csv", rows)
     write_csv(args.output_dir / "casos_invalidos.csv", rejected)
+    write_csv(args.output_dir / "referencia_originais.csv", reference_rows(reference))
     (args.output_dir / "resumo.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     save_scatter(rows, figures / "original_vs_sinteticas.png")
     save_subband_ratios(rows, levels, figures / "energia_por_subbanda.png")

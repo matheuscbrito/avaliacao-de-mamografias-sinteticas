@@ -1,0 +1,353 @@
+{
+  "n_originals": 37,
+  "reference_interval": {
+    "p1": -0.44059285521507263,
+    "p50": -0.009846887551248074,
+    "p99": 1.5841565132141113
+  },
+  "density_limits": {
+    "frac_bright": 0.03389538554784724,
+    "frac_dark": 0.005289776539195953,
+    "lung_median": 0.146634625327029
+  },
+  "baseline_iqr": {
+    "density_lung_median": 0.146634625327029,
+    "density_frac_bright": 0.013096717172335995,
+    "density_frac_dark": 0.0021159106156783815,
+    "wavelet_energy": 0.005401947939774323,
+    "wavelet_entropy": 0.019765652722846916,
+    "glcm_contrast": 3.015932044379828,
+    "glcm_energy": 0.032369726995686326,
+    "nex_score": 0.24535454417155567
+  },
+  "median_effect_iqr": {
+    "brilho -20%": {
+      "density_lung_median": -1.3639343337493033,
+      "density_frac_bright": -0.4067999254684912,
+      "density_frac_dark": 196.10121061408273,
+      "wavelet_energy": -0.2536259853200944,
+      "wavelet_entropy": -2.077939178360433,
+      "glcm_contrast": -0.3696260478740004,
+      "glcm_energy": 7.238989905246358,
+      "nex_score": 0.0
+    },
+    "brilho -10%": {
+      "density_lung_median": -0.6819671668746516,
+      "density_frac_bright": -0.25675077263175267,
+      "density_frac_dark": 7.785361901688151,
+      "wavelet_energy": 0.02268827040646738,
+      "wavelet_entropy": -0.04069809141904621,
+      "glcm_contrast": -0.006299245729739833,
+      "glcm_energy": 0.04138520965378535,
+      "nex_score": 0.0
+    },
+    "brilho +10%": {
+      "density_lung_median": 0.6819671668746516,
+      "density_frac_bright": 0.3490272043732276,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -0.0950176793461572,
+      "wavelet_entropy": 0.02342481446453324,
+      "glcm_contrast": -0.04857984984209035,
+      "glcm_energy": 0.009094691436008674,
+      "nex_score": 0.0
+    },
+    "brilho +20%": {
+      "density_lung_median": 1.3639343337493033,
+      "density_frac_bright": 0.9694175328232036,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -0.2568314199159466,
+      "wavelet_entropy": 0.07517212711654148,
+      "glcm_contrast": -0.13373589609251144,
+      "glcm_energy": 0.013889663276356656,
+      "nex_score": 0.0
+    },
+    "contraste ×0,5": {
+      "density_lung_median": 0.0,
+      "density_frac_bright": -0.4067999254684912,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -1.800396911356533,
+      "wavelet_entropy": -0.0007131254688619613,
+      "glcm_contrast": -1.4430863669126721,
+      "glcm_energy": 1.5147317425499651,
+      "nex_score": 0.0
+    },
+    "contraste ×1,5": {
+      "density_lung_median": 0.0,
+      "density_frac_bright": 1.3086554503921537,
+      "density_frac_dark": 4.42815944199772,
+      "wavelet_energy": 2.057197755295509,
+      "wavelet_entropy": 0.0798871734473162,
+      "glcm_contrast": 1.873326553765672,
+      "glcm_energy": -0.30314345197418363,
+      "nex_score": -3.393730779596459e-16
+    },
+    "gama 0,7": {
+      "density_lung_median": 1.846999543331022,
+      "density_frac_bright": 2.353383853202972,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": 0.30438654962988937,
+      "wavelet_entropy": 0.3903622646433699,
+      "glcm_contrast": 0.4455355444486755,
+      "glcm_energy": -0.29560767941018107,
+      "nex_score": 0.09608870373259615
+    },
+    "gama 1,4": {
+      "density_lung_median": -1.2008544940962878,
+      "density_frac_bright": -0.4067999254684912,
+      "density_frac_dark": 54.25962045418961,
+      "wavelet_energy": -1.043939979563353,
+      "wavelet_entropy": -0.8378681181610883,
+      "glcm_contrast": -0.9372498503543898,
+      "glcm_energy": 3.2012331569014516,
+      "nex_score": -0.08556050964718363
+    },
+    "lavagem 25%": {
+      "density_lung_median": 1.334016295578688,
+      "density_frac_bright": 0.0,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -1.0608138411707488,
+      "wavelet_entropy": 0.00653705012023764,
+      "glcm_contrast": -0.8445397455775078,
+      "glcm_energy": 0.4335855791350628,
+      "nex_score": 0.04297634893431224
+    },
+    "lavagem 50%": {
+      "density_lung_median": 2.668032591157376,
+      "density_frac_bright": 0.0,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -1.8107328336972641,
+      "wavelet_entropy": 0.01830741240222662,
+      "glcm_contrast": -1.4482782347938064,
+      "glcm_energy": 1.4906983690248583,
+      "nex_score": 0.017752841130051742
+    },
+    "lavagem 75%": {
+      "density_lung_median": 4.002048886736064,
+      "density_frac_bright": 0.0,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -2.2497569775795463,
+      "wavelet_entropy": -0.13258605681757402,
+      "glcm_contrast": -1.8226711754447815,
+      "glcm_energy": 5.995801836922096,
+      "nex_score": 0.22842994225282096
+    },
+    "saturação topo P90": {
+      "density_lung_median": 0.0,
+      "density_frac_bright": -0.4067999254684912,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -1.2601030592927889,
+      "wavelet_entropy": 0.4098745621887262,
+      "glcm_contrast": -0.8881481854280086,
+      "glcm_energy": 0.20423784505437378,
+      "nex_score": -0.020181403906356598
+    },
+    "saturação topo P75": {
+      "density_lung_median": 0.0,
+      "density_frac_bright": -0.4067999254684912,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -1.8993267512892331,
+      "wavelet_entropy": 0.14184494786221508,
+      "glcm_contrast": -1.4682527684876354,
+      "glcm_energy": 1.5487743406083143,
+      "nex_score": -0.0026291923050733206
+    },
+    "saturação fundo P10": {
+      "density_lung_median": 0.0,
+      "density_frac_bright": 0.0,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -0.06379276577769083,
+      "wavelet_entropy": -0.27826409287863024,
+      "glcm_contrast": -0.05431339244598886,
+      "glcm_energy": 0.28299489609676054,
+      "nex_score": -0.014399040243647944
+    },
+    "saturação fundo P25": {
+      "density_lung_median": 0.0,
+      "density_frac_bright": 0.0,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -0.16574970145733223,
+      "wavelet_entropy": -0.9237123309307349,
+      "glcm_contrast": -0.17184786933722693,
+      "glcm_energy": 1.8857203145519024,
+      "nex_score": -0.014049306191699888
+    },
+    "suavização σ=1": {
+      "density_lung_median": 0.04624429928398328,
+      "density_frac_bright": -0.20372576639667517,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -1.1693234686995637,
+      "wavelet_entropy": -0.16836778754962298,
+      "glcm_contrast": -1.1644615879549336,
+      "glcm_energy": 0.5293272474456923,
+      "nex_score": -3.4129505840792387
+    },
+    "suavização σ=2": {
+      "density_lung_median": 0.14394542470611624,
+      "density_frac_bright": -0.33010813624082486,
+      "density_frac_dark": 0.0,
+      "wavelet_energy": -1.8957433766412828,
+      "wavelet_entropy": -0.08585417894109287,
+      "glcm_contrast": -1.6081564079067525,
+      "glcm_energy": 0.9187736874718576,
+      "nex_score": -4.626473080535544
+    },
+    "ruído 2%": {
+      "density_lung_median": 0.008855291420644156,
+      "density_frac_bright": 0.004516711756296264,
+      "density_frac_dark": 0.028289821387379444,
+      "wavelet_energy": 0.071250354957629,
+      "wavelet_entropy": 0.23759348864535942,
+      "glcm_contrast": 0.24641684994346055,
+      "glcm_energy": -0.16927813402698028,
+      "nex_score": -0.00141995794304356
+    },
+    "ruído 5%": {
+      "density_lung_median": 0.04728320826005059,
+      "density_frac_bright": 0.004516711756296264,
+      "density_frac_dark": 0.842350631985931,
+      "wavelet_energy": 0.42377371986135987,
+      "wavelet_entropy": 0.6391354973496115,
+      "glcm_contrast": 1.525465724202731,
+      "glcm_energy": -0.42271066306864413,
+      "nex_score": 0.3712267839434628
+    }
+  },
+  "density_status_share": {
+    "brilho -20%": {
+      "too_bright": 0.0,
+      "too_dark": 1.0,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 0.0
+    },
+    "brilho -10%": {
+      "too_bright": 0.0,
+      "too_dark": 0.7297297297297297,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 0.2702702702702703
+    },
+    "brilho +10%": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 1.0
+    },
+    "brilho +20%": {
+      "too_bright": 0.08108108108108109,
+      "too_dark": 0.0,
+      "brighter": 0.918918918918919,
+      "darker": 0.0,
+      "ok": 0.0
+    },
+    "contraste ×0,5": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 1.0
+    },
+    "contraste ×1,5": {
+      "too_bright": 0.10810810810810811,
+      "too_dark": 0.5405405405405406,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 0.35135135135135137
+    },
+    "gama 0,7": {
+      "too_bright": 0.4594594594594595,
+      "too_dark": 0.0,
+      "brighter": 0.5405405405405406,
+      "darker": 0.0,
+      "ok": 0.0
+    },
+    "gama 1,4": {
+      "too_bright": 0.0,
+      "too_dark": 0.9459459459459459,
+      "brighter": 0.0,
+      "darker": 0.05405405405405406,
+      "ok": 0.0
+    },
+    "lavagem 25%": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 0.972972972972973,
+      "darker": 0.0,
+      "ok": 0.02702702702702703
+    },
+    "lavagem 50%": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 1.0,
+      "darker": 0.0,
+      "ok": 0.0
+    },
+    "lavagem 75%": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 1.0,
+      "darker": 0.0,
+      "ok": 0.0
+    },
+    "saturação topo P90": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 1.0
+    },
+    "saturação topo P75": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 1.0
+    },
+    "saturação fundo P10": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 1.0
+    },
+    "saturação fundo P25": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 1.0
+    },
+    "suavização σ=1": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 1.0
+    },
+    "suavização σ=2": {
+      "too_bright": 0.0,
+      "too_dark": 0.0,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 1.0
+    },
+    "ruído 2%": {
+      "too_bright": 0.0,
+      "too_dark": 0.08108108108108109,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 0.918918918918919
+    },
+    "ruído 5%": {
+      "too_bright": 0.0,
+      "too_dark": 0.40540540540540543,
+      "brighter": 0.0,
+      "darker": 0.0,
+      "ok": 0.5945945945945946
+    }
+  },
+  "wavelet": "haar",
+  "level": 2,
+  "glcm_levels": 32
+}

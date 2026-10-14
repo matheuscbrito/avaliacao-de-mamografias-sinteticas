@@ -41,6 +41,32 @@ Conclusão: o Dsr é claramente superior ao Dgen na preservação de textura
 wavelet, mas ainda suaviza o parênquima. Isso não equivale a uma validação
 clínica, e o limiar de 1 IQR continua sendo uma configuração do MVP.
 
+## Eixo de densidade (adicionado em 07/10/2026, pós-hoc)
+
+Energia e entropia wavelet não enxergam o nível médio de cinza, então um pulmão
+que virou "tecido mole" pode passar como textura boa. O eixo de densidade
+(`src/density_features.py`) olha só para o histograma do pulmão e compara cada
+sintética com **a sua própria original**. Ele não altera o status de textura;
+os cortes sinalizados vão para `manual_review` em `*_status_with_density`.
+
+| | ok | `brighter` | `darker` | `too_bright` | `too_dark` |
+|---|---:|---:|---:|---:|---:|
+| Dgen | 20 | 9 | 5 | 3 | 0 |
+| Dsr | 34 | 0 | 2 | 0 | 1 |
+
+- Os três `too_bright` do Dgen são os cortes quebrados que antes ganhavam do Dsr
+  na wavelet (078 ×2 e 081): de 7% a 34% do pulmão acima do P99 real, contra no
+  máximo 1% no Dsr. Dois deles estavam `approved` pela textura.
+- Os nove `brighter` do Dgen são cortes em que o pulmão inteiro clareou mais
+  de 1 IQR, mas sem sair da faixa real; a wavelet também não os percebia.
+- O Dsr fica, em mediana, um pouco mais escuro que a original (−0,49 IQR), mas
+  só 3 cortes passam do limite. O único `too_dark` (0,8% do pulmão abaixo do P1,
+  contra 0,5% de tolerância) está no limite e merece só uma olhada.
+- Com a guarda, as aprovações caem de 8 → 5 no Dgen e de 9 → 8 no Dsr.
+
+O teste de perturbação em `../teste_perturbacao_wavelet/` confirma que esse eixo
+pega mudanças de brilho e que a textura não as pega.
+
 ## Reproduzir
 
 A partir de `wavelet/`:
