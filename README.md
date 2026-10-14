@@ -10,10 +10,17 @@ pulmão.
 - `dados/Dsr/`: nova geração; contém os mesmos originais e suas
   sintéticas, mas não traz máscaras próprias.
 - `glcm/`: código da análise GLCM e dashboard.
-- `wavelet/`: código da análise wavelet e dashboard.
-- `resultados/`: tabelas da comparação entre as duas gerações.
+- `wavelet/`: código da análise wavelet (pipeline, densidade, diagnóstico e mapa por região) e dashboard.
+- `resultados/`: uma pasta por análise, cada uma com `resumo.md`, tabelas e figuras.
 - `slides/`: apresentação atual e imagens para inserir em novos slides.
-- `documentacao/`: descrição do framework.
+- `documentacao/`: `FRAMEWORK_TEXTURA_CT.md` (framework geral) e `WAVELET.md` (tudo o que fazemos com a wavelet).
+
+## Onde ler
+
+- Framework e decisão de uso da sintética: `documentacao/FRAMEWORK_TEXTURA_CT.md`.
+- Pipeline, regras, densidade, diagnóstico e mapa da wavelet: `documentacao/WAVELET.md`.
+- Como rodar cada script da wavelet: `wavelet/README.md`.
+- Resultado de cada análise: `resultados/<pasta>/resumo.md`.
 
 ## Comparação Dgen × Dsr
 
