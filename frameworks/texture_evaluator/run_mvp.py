@@ -10,12 +10,13 @@ from wavelet.src.density_features import reference_interval
 from wavelet.src.wavelet_features_fullimage import wavelet_energy_entropy_fullimage
 from wavelet.src.wavelet_brightness import ll_mean
 from frameworks.texture_evaluator.glcm.src import calibrate_robust_scale, extract_glcm
+from frameworks.texture_evaluator.report import generate_report
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--data-dir", type=Path, required=True, help="Pasta com original e _generate")
     p.add_argument("--mask-dir", type=Path, help="Pasta das máscaras; obrigatória para Dsr")
-    p.add_argument("--output-dir", type=Path, required=True); p.add_argument("--preview-limit", type=int, default=12)
+    p.add_argument("--output-dir", type=Path, required=True); p.add_argument("--preview-limit", type=int, default=-1)
     a = p.parse_args(); valid = []
     for paths in discover_cases(a.data_dir):
         if a.mask_dir:
@@ -41,7 +42,7 @@ def main() -> None:
              'wavelet_ll_real':ll_mean(c.original,c.lung_mask,interval['p1'],interval['p99'],'haar',2,.9),
              'wavelet_ll_synthetic':ll_mean(c.synthetic,c.lung_mask,interval['p1'],interval['p99'],'haar',2,.9)}
         rows.append(row)
-        if n<a.preview_limit:
+        if a.preview_limit < 0 or n<a.preview_limit:
             fig,ax=plt.subplots(1,3,figsize=(12,4))
             for axis,img,title in zip(ax[:2],(c.original,c.synthetic),('Real','Sintética')):
                 axis.imshow(img,cmap='gray',vmin=interval['p1'],vmax=interval['p99']); axis.contour(c.lung_mask,[.5],colors='#12a57a'); axis.set_title(title); axis.axis('off')
@@ -51,4 +52,5 @@ def main() -> None:
     with (a.output_dir/'mvp_results.csv').open('w',newline='',encoding='utf-8') as f:
         w=csv.DictWriter(f,fieldnames=rows[0].keys()); w.writeheader(); w.writerows(rows)
     (a.output_dir/'mvp_protocol.json').write_text(json.dumps({'valid_pairs':len(valid),'glcm_scale':scale.as_dict(),'wavelet_interval':interval,'third_metric':'reserved'},indent=2),encoding='utf-8')
+    generate_report(rows, a.output_dir)
 if __name__=='__main__': main()
