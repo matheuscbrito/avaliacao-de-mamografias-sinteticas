@@ -1,6 +1,6 @@
 """Compara as gerações Dgen e Dsr com as features wavelet (método de imagem inteira).
 
-Espelha `glcm/src/compare_generations.py`: o Dsr não traz máscaras próprias, então
+Espelha `archive/legacy/glcm_mvp/src/compare_generations.py`: o Dsr não traz máscaras próprias, então
 as máscaras do Dgen são reutilizadas depois de confirmar que as originais dos dois
 conjuntos são idênticas. Os mesmos cortes passam pelo filtro de ROI do MVP, pela
 referência construída só com originais aceitas e pela classificação inicial do

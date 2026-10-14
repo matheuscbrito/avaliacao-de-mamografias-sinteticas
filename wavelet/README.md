@@ -2,7 +2,8 @@
 
 Este projeto avalia se uma CT pulmonar sintética preserva a textura da original
 que a condicionou e continua plausível perante as CTs reais validadas do mesmo
-dataset. É o irmão do MVP de GLCM (`../glcm`): mesmo fluxo, outra família de
+dataset. É o irmão do módulo GLCM (`../frameworks/texture_evaluator/glcm`; o MVP
+antigo está em `../archive/legacy/glcm_mvp`): mesmo fluxo, outra família de
 features.
 
 A wavelet decompõe a imagem em sub-bandas de frequência e escala. Ela enxerga a
@@ -10,7 +11,7 @@ textura em várias escalas ao mesmo tempo e diz **o que** foi perdido (borrou,
 perdeu contraste, estourou, ruído). O **brilho** é medido por um eixo separado,
 a densidade, porque a wavelet de detalhe não enxerga brilho.
 
-> **Documentação completa:** [`../documentacao/WAVELET.md`](../documentacao/WAVELET.md)
+> **Documentação completa:** [`../docs/wavelet.md`](../docs/wavelet.md)
 > explica o pipeline, todas as regras (validação, referência, decisão, densidade,
 > veredito de textura) e o mapa por região. Este README só diz como rodar e onde
 > está cada coisa.
@@ -65,7 +66,7 @@ ficam em `../resultados/<pasta>/resumo.md`.
 | Mapa por região (blocos de 16 px) | `python -m src.mapa_regioes --data-dir ../dados/Dsr --mask-dir ../dados/Dgen --examples-dir ../dados/Dgen --block 16 --output-dir ../resultados/mapa_regioes` | `resultados/mapa_regioes/` |
 | Teste de perturbação dos quatro eixos | `python -m src.perturbation_test --data-dir ../dados/Dgen --output-dir ../resultados/teste_perturbacao_wavelet` | `resultados/teste_perturbacao_wavelet/` |
 | Comparação Dgen × Dsr (histórica) | `python -m src.compare_generations --dgen-dir ../dados/Dgen --dsr-dir ../dados/Dsr --output-dir ../resultados/comparacao_Dgen_Dsr_wavelet` | `resultados/comparacao_Dgen_Dsr_wavelet/` |
-| Figuras do report (exemplo de brilho sem resposta da wavelet; curva de brilho) | `python -m src.figuras_report --data-dir ../dados/Dsr --mask-dir ../dados/Dgen --examples-dir ../dados/Dgen --case-id "1.000000-P4P105S300I00009 Gated 50.0A-40237-1-081" --sweep-csv ../resultados/wavelet_brilho/varredura_por_caso.csv --output-dir ../slides/imagens` | `slides/imagens/` |
+| Figuras do report (exemplo de brilho sem resposta da wavelet; curva de brilho) | `python -m src.figuras_report --data-dir ../dados/Dsr --mask-dir ../dados/Dgen --examples-dir ../dados/Dgen --case-id "1.000000-P4P105S300I00009 Gated 50.0A-40237-1-081" --sweep-csv ../resultados/wavelet_brilho/varredura_por_caso.csv --output-dir ../archive/presentation/slides/imagens` | `archive/presentation/slides/imagens/` |
 | Dashboard | `streamlit run dashboard/app.py` | lê os arquivos prontos |
 
 O ambiente do repositório fica em `../.venv`; nos resumos os comandos aparecem
@@ -187,6 +188,6 @@ avaliação humana de exemplos aprovados, revisados e rejeitados.
 A guarda de densidade (`*_status_with_density`) manda para `manual_review` os
 cortes aprovados pela textura cuja densidade não está `ok`; um `reject`
 continua `reject`. A regra completa e o veredito de textura por
-região estão detalhados em [`../documentacao/WAVELET.md`](../documentacao/WAVELET.md).
+região estão detalhados em [`../docs/wavelet.md`](../docs/wavelet.md).
 Os limites do veredito (80–125% de energia, razão 0,9–1,1) são exploratórios,
 não validados.

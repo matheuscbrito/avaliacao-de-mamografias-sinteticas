@@ -4,8 +4,10 @@ Este documento explica **o que fazemos com a wavelet**, de ponta a ponta: a
 região medida, o cálculo, as regras de decisão, o eixo de densidade, o
 diagnóstico do tipo de defeito e o mapa por região. Cada regra aponta para o
 arquivo onde ela está no código. Para rodar os scripts, veja
-[`wavelet/README.md`](../wavelet/README.md). Para o framework completo (GLCM,
-GLRLM, espectro), veja [`FRAMEWORK_TEXTURA_CT.md`](FRAMEWORK_TEXTURA_CT.md).
+[`wavelet/README.md`](../wavelet/README.md). Para o contrato de integração com
+GLCM e NEXP, veja [`contracts/texture_evaluator.md`](contracts/texture_evaluator.md).
+A descrição anterior do framework (GLCM, GLRLM, espectro) está arquivada em
+[`FRAMEWORK_TEXTURA_CT.md`](../archive/documentation/previous_docs/FRAMEWORK_TEXTURA_CT.md).
 
 ## 1. Em uma página
 
@@ -19,7 +21,7 @@ gerou, em brilho e em textura?
 | **Densidade (brilho)** | *Se* algo mudou: o pulmão ficou claro ou escuro demais? | `density_features.py` |
 | **Wavelet** | *O que* aconteceu com a textura e em que escala (borrou, perdeu contraste, estourou, ruído) | `wavelet_features_fullimage.py`, `wavelet_diagnostico.py` |
 | **Mapa por região** | *Onde* o defeito está, e se a textura está nos mesmos lugares da original | `mapa_regioes.py` |
-| GLCM, NEx | Outras famílias de textura (GLCM em `../glcm`, NEx em `nyquist_excess.py`) | — |
+| GLCM, NEx | Outras famílias de textura (GLCM em `frameworks/texture_evaluator/glcm`, NEx em `wavelet/src/nyquist_excess.py`) | — |
 
 **Três fatos que explicam o desenho:**
 
@@ -219,6 +221,12 @@ não é `ok` e a textura tinha aprovado o corte (`approved` ou
 `approved_with_observation`), a coluna `*_status_with_density` manda o corte
 para `manual_review`. Cortes já em `manual_review` ou `reject` ficam como
 estão.
+
+> **Duas métricas de brilho, por enquanto.** O repositório também tem o filtro
+> de brilho do contrato [`contracts/brightness_filter.md`](contracts/brightness_filter.md)
+> (Δμ na régua de 32 tons do GLCM e `Sat31%`). Ele usa outra régua e outros
+> limites. As duas convivem até o time decidir como combiná-las; nenhuma
+> substitui a outra ainda.
 
 **Por que comparar com a própria original:** uma regra absoluta ("mediana acima
 de X") marcava errado as originais escuras e as sintéticas que as seguiam.

@@ -6,7 +6,8 @@ eixos são medidos antes e depois:
 
 - densidade (`density_features.py`): mediana do pulmão e frações fora da faixa real;
 - wavelet (imagem inteira): energia e entropia das sub-bandas de detalhe;
-- GLCM (`../glcm/src/glcm_features.py`): contraste e energia;
+- GLCM (`../archive/legacy/glcm_mvp/src/glcm_features.py`, a versão antiga com
+  corte P1–P99 e 32 níveis): contraste e energia;
 - NEx (`nyquist_excess.py`): excesso perto de Nyquist, imagem inteira.
 
 A mudança de cada métrica é dividida pelo IQR dessa métrica entre as originais
@@ -35,7 +36,9 @@ from .validate_cases import RejectedCase, validate_case
 from .wavelet_features_fullimage import wavelet_energy_entropy_fullimage
 from .nyquist_excess import nyquist_excess
 
-GLCM_FEATURES_PATH = Path(__file__).resolve().parents[2] / "glcm" / "src" / "glcm_features.py"
+# GLCM antigo (P1–P99, 32 níveis), arquivado na reorganização do repositório; o
+# módulo ativo (Robust Scaler) fica em frameworks/texture_evaluator/glcm
+GLCM_FEATURES_PATH = Path(__file__).resolve().parents[2] / "archive" / "legacy" / "glcm_mvp" / "src" / "glcm_features.py"
 METRICS = (
     ("density", "lung_median"), ("density", "frac_bright"), ("density", "frac_dark"),
     ("wavelet", "energy"), ("wavelet", "entropy"),

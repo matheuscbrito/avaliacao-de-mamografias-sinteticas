@@ -77,11 +77,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--figures-dir", type=Path, help="Pasta opcional para montagens visuais.")
     parser.add_argument("--levels", type=int, default=32)
+    parser.add_argument(
+        "--clip-percentiles",
+        type=float,
+        nargs=2,
+        metavar=("LOW", "HIGH"),
+        default=(1.0, 99.0),
+        help="Percentis globais das originais válidas usados no clipping antes da discretização.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    clip_percentiles = tuple(args.clip_percentiles)
+    if not 0 <= clip_percentiles[0] < clip_percentiles[1] <= 100:
+        raise ValueError("--clip-percentiles deve obedecer a 0 <= LOW < HIGH <= 100")
     dgen_originals, dsr_originals = original_paths(args.dgen_dir), original_paths(args.dsr_dir)
     shared = sorted(dgen_originals.keys() & dsr_originals.keys())
     if len(shared) != len(dgen_originals) or len(shared) != len(dsr_originals):
@@ -104,7 +115,7 @@ def main() -> None:
             valid.append(result)
 
     pixels = np.concatenate([case.original[case.lung_mask] for case in valid])
-    clip_low, clip_high = (float(value) for value in np.percentile(pixels, (1, 99)))
+    clip_low, clip_high = (float(value) for value in np.percentile(pixels, clip_percentiles))
     rows: list[dict] = []
     for case in valid:
         dsr = load_image(args.dsr_dir / f"{case.paths.case_id}_generate.tiff")
@@ -137,7 +148,7 @@ def main() -> None:
     write_csv(args.output_dir / "casos_invalidos.csv", rejected)
     summary = {
         "shared_pairs": len(shared), "valid_pairs": len(rows), "invalid_pairs": len(rejected),
-        "clip_interval": [clip_low, clip_high], "levels": args.levels,
+        "clip_interval": [clip_low, clip_high], "clip_percentiles": list(clip_percentiles), "levels": args.levels,
         "dgen_lower_mae": sum(row["dgen_mae"] < row["dsr_mae"] for row in rows),
         "dsr_lower_mae": sum(row["dsr_mae"] < row["dgen_mae"] for row in rows),
         "dgen_closer_contrast": sum(row["dgen_contrast_error"] < row["dsr_contrast_error"] for row in rows),
