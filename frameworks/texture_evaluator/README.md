@@ -24,4 +24,19 @@ GLCM e Wavelet usam a **mesma régua** de clipping: Tukey k=3 calibrada nos pixe
 
 O brilho tem duas leituras lado a lado: o filtro do contrato (`brightness_status`, por Δμ e Sat31) e o eixo de densidade da Wavelet (`density_status`, `density_median_shift_iqr`). Como as duas convivem ainda será decidido. A terceira métrica está reservada, sem implementação especulativa.
 
+## Decisão final
+
+Cada corte sai com `final_status` (`aprovada`, `revisar` ou `rejeitar`) e os motivos em `final_reasons`. As regras ficam em [`decision.py`](decision.py):
+
+1. **Brilho:** só o filtro do contrato rejeita; a densidade manda para revisão.
+2. **Quantidade de detalhe:** contraste GLCM e energia fina Wavelet devem concordar (80–125% da original); se discordarem, o corte vai para revisão.
+3. **Tipo de defeito:** veredito Wavelet diferente de "textura preservada" manda para revisão.
+
+A validação com defeitos conhecidos está em [`resultados/teste_decisao/resumo.md`](../../resultados/teste_decisao/resumo.md):
+
+```bash
+.venv/bin/python -m frameworks.texture_evaluator.teste_decisao \
+  --data-dir dados/Dsr --mask-dir dados/Dgen --output-dir resultados/teste_decisao
+```
+
 Depois da execução, abra `outputs/mvp/report/index.html` no navegador. Ele explica cada número, mostra os gráficos pareados real × sintética e traz uma ficha visual para cada corte analisado.

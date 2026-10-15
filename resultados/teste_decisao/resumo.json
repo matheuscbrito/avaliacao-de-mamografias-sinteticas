@@ -1,0 +1,170 @@
+{
+  "n_pairs": 37,
+  "by_defect": {
+    "sem defeito": {
+      "final": {
+        "aprovada": 37
+      },
+      "brightness_filter": {
+        "approved": 37
+      },
+      "density": {
+        "ok": 37
+      },
+      "texture": "textura preservada (37/37)",
+      "disagreement": 0
+    },
+    "brilho +0,5": {
+      "final": {
+        "aprovada": 37
+      },
+      "brightness_filter": {
+        "approved": 37
+      },
+      "density": {
+        "ok": 37
+      },
+      "texture": "textura preservada (37/37)",
+      "disagreement": 0
+    },
+    "brilho +1,5": {
+      "final": {
+        "revisar": 37
+      },
+      "brightness_filter": {
+        "manual_review": 37
+      },
+      "density": {
+        "brighter": 32,
+        "too_bright": 5
+      },
+      "texture": "textura preservada (19/37)",
+      "disagreement": 1
+    },
+    "brilho +2,5": {
+      "final": {
+        "rejeitar": 37
+      },
+      "brightness_filter": {
+        "hard_reject": 37
+      },
+      "density": {
+        "brighter": 16,
+        "too_bright": 21
+      },
+      "texture": "estourou (25/37)",
+      "disagreement": 2
+    },
+    "brilho −1,5": {
+      "final": {
+        "revisar": 37
+      },
+      "brightness_filter": {
+        "manual_review": 37
+      },
+      "density": {
+        "too_dark": 37
+      },
+      "texture": "textura preservada (37/37)",
+      "disagreement": 0
+    },
+    "contraste ×0,5": {
+      "final": {
+        "revisar": 37
+      },
+      "brightness_filter": {
+        "approved": 37
+      },
+      "density": {
+        "ok": 37
+      },
+      "texture": "perdeu contraste (37/37)",
+      "disagreement": 0
+    },
+    "contraste ×1,5": {
+      "final": {
+        "revisar": 37
+      },
+      "brightness_filter": {
+        "approved": 37
+      },
+      "density": {
+        "too_dark": 20,
+        "too_bright": 4,
+        "ok": 13
+      },
+      "texture": "ganhou contraste (33/37)",
+      "disagreement": 0
+    },
+    "suavização σ=1": {
+      "final": {
+        "revisar": 37
+      },
+      "brightness_filter": {
+        "approved": 37
+      },
+      "density": {
+        "ok": 37
+      },
+      "texture": "borrou (37/37)",
+      "disagreement": 0
+    },
+    "suavização σ=2": {
+      "final": {
+        "revisar": 37
+      },
+      "brightness_filter": {
+        "approved": 37
+      },
+      "density": {
+        "ok": 37
+      },
+      "texture": "borrou (37/37)",
+      "disagreement": 0
+    },
+    "ruído 2%": {
+      "final": {
+        "revisar": 20,
+        "aprovada": 17
+      },
+      "brightness_filter": {
+        "approved": 37
+      },
+      "density": {
+        "ok": 35,
+        "too_dark": 2
+      },
+      "texture": "ruído (20/37)",
+      "disagreement": 6
+    },
+    "ruído 5%": {
+      "final": {
+        "revisar": 37
+      },
+      "brightness_filter": {
+        "approved": 37
+      },
+      "density": {
+        "too_dark": 19,
+        "ok": 18
+      },
+      "texture": "ruído (37/37)",
+      "disagreement": 0
+    },
+    "lavagem 50%": {
+      "final": {
+        "rejeitar": 32,
+        "revisar": 5
+      },
+      "brightness_filter": {
+        "hard_reject": 32,
+        "manual_review": 5
+      },
+      "density": {
+        "brighter": 37
+      },
+      "texture": "perdeu contraste (37/37)",
+      "disagreement": 0
+    }
+  }
+}
