@@ -1,0 +1,169 @@
+{
+  "n_pairs": 37,
+  "effect_iqr": {
+    "P1–P99": {
+      "brilho −1 IQR": {
+        "glcm_contrast": -0.31926496234322027,
+        "glcm_energy": 6.156966837477774,
+        "wavelet_fine": -0.21850990075819726,
+        "wavelet_coarse": -0.19070115080306338,
+        "wavelet_ratio": -0.09283014247317717,
+        "wavelet_entropy": -1.7610078115764607
+      },
+      "brilho −0,5 IQR": {
+        "glcm_contrast": -0.00270848792790408,
+        "glcm_energy": 0.039652543545413414,
+        "wavelet_fine": 0.006905720788283933,
+        "wavelet_coarse": 0.03409695470119152,
+        "wavelet_ratio": -0.06133376030454679,
+        "wavelet_entropy": -0.03745700677439656
+      },
+      "brilho +0,5 IQR": {
+        "glcm_contrast": -0.04307960534477357,
+        "glcm_energy": 0.00680967684223162,
+        "wavelet_fine": -0.04947083647554691,
+        "wavelet_coarse": -0.09182969520617369,
+        "wavelet_ratio": 0.08998915276301105,
+        "wavelet_entropy": 0.022125488150843704
+      },
+      "brilho +1 IQR": {
+        "glcm_contrast": -0.12263140619189877,
+        "glcm_energy": 0.005523501612050545,
+        "wavelet_fine": -0.1414894115392176,
+        "wavelet_coarse": -0.24038169601769352,
+        "wavelet_ratio": 0.22109804364507463,
+        "wavelet_entropy": 0.06940099804231778
+      },
+      "controle: contraste ×0,5": {
+        "glcm_contrast": -1.4430863669126721,
+        "glcm_energy": 1.5147317425499651,
+        "wavelet_fine": -1.5027575857269126,
+        "wavelet_coarse": -1.712493903229006,
+        "wavelet_ratio": -0.07524761801376559,
+        "wavelet_entropy": -0.0007131254688619613
+      },
+      "controle: suavização σ=1": {
+        "glcm_contrast": -1.1644615879549336,
+        "glcm_energy": 0.5293272474456923,
+        "wavelet_fine": -1.245173615434068,
+        "wavelet_coarse": -1.0913968651807697,
+        "wavelet_ratio": -1.745531215444948,
+        "wavelet_entropy": -0.16836778754962298
+      }
+    },
+    "Tukey k=3": {
+      "brilho −1 IQR": {
+        "glcm_contrast": 0.06196795327153495,
+        "glcm_energy": -0.00893043506880063,
+        "wavelet_fine": 0.07703192801637766,
+        "wavelet_coarse": 0.15306537897165656,
+        "wavelet_ratio": -0.16076981005084098,
+        "wavelet_entropy": -0.02201951209430229
+      },
+      "brilho −0,5 IQR": {
+        "glcm_contrast": 0.043682069328949816,
+        "glcm_energy": -0.00879100913387416,
+        "wavelet_fine": 0.052041663409684275,
+        "wavelet_coarse": 0.10200263459113978,
+        "wavelet_ratio": -0.099266382063706,
+        "wavelet_entropy": -0.022038767788393778
+      },
+      "brilho +0,5 IQR": {
+        "glcm_contrast": -0.07750605292022052,
+        "glcm_energy": 0.008507970050007948,
+        "wavelet_fine": -0.09467754600627265,
+        "wavelet_coarse": -0.16855869011862998,
+        "wavelet_ratio": 0.13246707805513008,
+        "wavelet_entropy": 0.04813891437306512
+      },
+      "brilho +1 IQR": {
+        "glcm_contrast": -0.1912670034938613,
+        "glcm_energy": 0.01785310703177381,
+        "wavelet_fine": -0.24036674340395275,
+        "wavelet_coarse": -0.39546248687363145,
+        "wavelet_ratio": 0.3363762173824037,
+        "wavelet_entropy": 0.1208166850196355
+      },
+      "controle: contraste ×0,5": {
+        "glcm_contrast": -1.4192201540151033,
+        "glcm_energy": 1.9550388577429054,
+        "wavelet_fine": -1.557584308489566,
+        "wavelet_coarse": -1.8292055024243865,
+        "wavelet_ratio": -0.1661998036134854,
+        "wavelet_entropy": -0.01863138304621324
+      },
+      "controle: suavização σ=1": {
+        "glcm_contrast": -1.1700852904837409,
+        "glcm_energy": 0.6357337406642186,
+        "wavelet_fine": -1.2977255065021964,
+        "wavelet_coarse": -1.1478945228703452,
+        "wavelet_ratio": -2.079708013891927,
+        "wavelet_entropy": -0.20049083542136276
+      }
+    }
+  },
+  "real_data": {
+    "P1–P99": {
+      "clip": [
+        -0.44059285521507263,
+        1.5841565132141113
+      ],
+      "spearman_vs_delta_mu": {
+        "glcm_contrast": 0.622569938359412,
+        "glcm_energy": -0.864153627311522,
+        "wavelet_fine": 0.5457562825983878,
+        "wavelet_coarse": 0.6595542911332384,
+        "wavelet_ratio": -0.1773352299668089,
+        "wavelet_entropy": 0.8162636320531057
+      },
+      "median_ratio": {
+        "glcm_contrast": 0.5852272026975072,
+        "glcm_energy": 1.2734316859887802,
+        "wavelet_fine": 0.5363626145105276,
+        "wavelet_coarse": 0.6393450439442898,
+        "wavelet_ratio": 0.8434739502857043,
+        "wavelet_entropy": 1.0073421016668713
+      },
+      "floor_pct_median": {
+        "original": 0.04294794708812919,
+        "synthetic": 0.8360427310729215
+      },
+      "ceiling_pct_median": {
+        "original": 0.5415083628106031,
+        "synthetic": 0.01746801170356784
+      },
+      "floor_pct_max_synthetic": 35.39770712681716
+    },
+    "Tukey k=3": {
+      "clip": [
+        -1.3312878906726837,
+        1.3943362832069397
+      ],
+      "spearman_vs_delta_mu": {
+        "glcm_contrast": 0.579895685158843,
+        "glcm_energy": -0.7413466097676623,
+        "wavelet_fine": 0.4836415362731152,
+        "wavelet_coarse": 0.5623518255097202,
+        "wavelet_ratio": -0.08487434803224277,
+        "wavelet_entropy": 0.7603129445234708
+      },
+      "median_ratio": {
+        "glcm_contrast": 0.5991000973924753,
+        "glcm_energy": 1.3296605059439923,
+        "wavelet_fine": 0.5449620099957176,
+        "wavelet_coarse": 0.6600920560360886,
+        "wavelet_ratio": 0.8311704527554633,
+        "wavelet_entropy": 1.0070661281772477
+      },
+      "floor_pct_median": {
+        "original": 0.0,
+        "synthetic": 0.0
+      },
+      "ceiling_pct_median": {
+        "original": 1.0393466963622866,
+        "synthetic": 0.17391304347826086
+      },
+      "floor_pct_max_synthetic": 0.0
+    }
+  }
+}

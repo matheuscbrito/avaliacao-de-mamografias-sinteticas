@@ -104,6 +104,13 @@ Ela é usada em dois lugares:
 > efeito que o brilho tem na energia (veja a seção 7). A wavelet em si é
 > insensível a brilho.
 
+> **No MVP do avaliador de textura** (`frameworks/texture_evaluator/run_mvp.py`),
+> a wavelet usa a régua **Tukey k=3 da GLCM** em vez de P1–P99, e a densidade
+> continua em P1–P99. O piso do P1 é alto: escurecer o pulmão o cortava, e a
+> energia GLCM e a entropia wavelet reagiam ao brilho. Com Tukey, as duas ficam
+> cegas a brilho puro. Os scripts desta pasta seguem com P1–P99. Detalhes em
+> `resultados/regua_unica/resumo.md`.
+
 ## 5. Como a wavelet é calculada
 
 Arquivo: `wavelet_features_fullimage.py` (método adotado).

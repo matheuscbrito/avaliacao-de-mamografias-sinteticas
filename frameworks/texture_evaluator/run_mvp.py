@@ -32,16 +32,19 @@ def main() -> None:
     # eixo de densidade da Wavelet: segunda métrica de brilho, lado a lado com Δμ/Sat31 (convivência ainda em aberto)
     limits = density_limits([density_features(c.original, c.lung_mask, interval) for c in valid])
     settings = SimpleNamespace(wavelet='haar', min_tissue=.9)
+    # régua única: a Wavelet corta e normaliza com a mesma régua Tukey k=3 da GLCM (ver teste_regua.py);
+    # a densidade continua na faixa P1–P99, que é a definição de "fora da faixa real"
+    ruler = {'p1': scale.clip_low, 'p99': scale.clip_high}
     means = np.array([c.original[c.lung_mask].mean() for c in valid]); mean_iqr = float(np.diff(np.percentile(means, [25, 75]))[0])
     rows=[]; previews=a.output_dir/"previews"; previews.mkdir(parents=True, exist_ok=True)
     for n, c in enumerate(valid):
         real_g, syn_g = extract_glcm(c.original,c.lung_mask,scale), extract_glcm(c.synthetic,c.lung_mask,scale)
-        real_w=wavelet_energy_entropy_fullimage(c.original,c.lung_mask,interval['p1'],interval['p99'],'haar',2)
-        syn_w=wavelet_energy_entropy_fullimage(c.synthetic,c.lung_mask,interval['p1'],interval['p99'],'haar',2)
+        real_w=wavelet_energy_entropy_fullimage(c.original,c.lung_mask,ruler['p1'],ruler['p99'],'haar',2)
+        syn_w=wavelet_energy_entropy_fullimage(c.synthetic,c.lung_mask,ruler['p1'],ruler['p99'],'haar',2)
         delta=float(c.synthetic[c.lung_mask].mean()-c.original[c.lung_mask].mean()); sat=syn_g['saturation_tone_31_pct']
         dens_real, dens_syn = density_features(c.original,c.lung_mask,interval), density_features(c.synthetic,c.lung_mask,interval)
         # veredito da Wavelet: energia fina/grossa da sintética em % da original (limites exploratórios)
-        reading = relative(raw_readings(c.synthetic,c.lung_mask,interval,settings), raw_readings(c.original,c.lung_mask,interval,settings))
+        reading = relative(raw_readings(c.synthetic,c.lung_mask,ruler,settings), raw_readings(c.original,c.lung_mask,ruler,settings))
         status='hard_reject' if abs(delta)>2*mean_iqr or sat>15 else 'manual_review' if abs(delta)>mean_iqr else 'approved'
         row={'case_id':c.paths.case_id,'brightness_status':status,'delta_mu':delta,'sat31_pct':sat,
              'density_status':density_status(dens_syn,dens_real,limits),'density_median_shift_iqr':density_shift(dens_syn,dens_real,limits)['median_shift_iqr'],
@@ -50,8 +53,8 @@ def main() -> None:
              'glcm_energy_real':real_g['glcm_energy'],'glcm_energy_synthetic':syn_g['glcm_energy'],
              'wavelet_energy_real':real_w['energy'],'wavelet_energy_synthetic':syn_w['energy'],
              'wavelet_entropy_real':real_w['entropy'],'wavelet_entropy_synthetic':syn_w['entropy'],
-             'wavelet_ll_real':ll_mean(c.original,c.lung_mask,interval['p1'],interval['p99'],'haar',2,.9),
-             'wavelet_ll_synthetic':ll_mean(c.synthetic,c.lung_mask,interval['p1'],interval['p99'],'haar',2,.9)}
+             'wavelet_ll_real':ll_mean(c.original,c.lung_mask,ruler['p1'],ruler['p99'],'haar',2,.9),
+             'wavelet_ll_synthetic':ll_mean(c.synthetic,c.lung_mask,ruler['p1'],ruler['p99'],'haar',2,.9)}
         rows.append(row)
         if a.preview_limit < 0 or n<a.preview_limit:
             fig,ax=plt.subplots(1,3,figsize=(12,4))
@@ -62,6 +65,6 @@ def main() -> None:
             fig.tight_layout(); fig.savefig(previews/f'{n:02d}.png',dpi=150); plt.close(fig)
     with (a.output_dir/'mvp_results.csv').open('w',newline='',encoding='utf-8') as f:
         w=csv.DictWriter(f,fieldnames=rows[0].keys()); w.writeheader(); w.writerows(rows)
-    (a.output_dir/'mvp_protocol.json').write_text(json.dumps({'valid_pairs':len(valid),'glcm_scale':scale.as_dict(),'wavelet_interval':interval,'density_limits':limits,'third_metric':'reserved'},indent=2),encoding='utf-8')
+    (a.output_dir/'mvp_protocol.json').write_text(json.dumps({'valid_pairs':len(valid),'glcm_scale':scale.as_dict(),'texture_ruler':'glcm_scale (Tukey k=3), compartilhada por GLCM e Wavelet','density_interval':interval,'density_limits':limits,'third_metric':'reserved'},indent=2),encoding='utf-8')
     generate_report(rows, a.output_dir)
 if __name__=='__main__': main()
