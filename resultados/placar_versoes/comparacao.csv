@@ -1,0 +1,14 @@
+from,to,group,indicator,gain,ci_low,ci_high,result
+Dgen,Dsr,final,aprovada,10.81081081081081,2.7027027027027026,21.62162162162162,melhorou
+Dgen,Dsr,brilho,abs_delta_mu,0.09479859490082856,0.01525363232232374,0.2773466411952493,melhorou
+Dgen,Dsr,brilho,brilho,37.83783783783784,18.91891891891892,56.75675675675676,melhorou
+Dgen,Dsr,brilho,abs_delta_ll,0.03196022483892613,0.009817327919555974,0.1102117602430539,mudança pequena
+Dgen,Dsr,brilho,map_area_brilho_local_pct,nan,nan,nan,n/a
+Dgen,Dsr,textura,wavelet_fine_pct,5.109453745314113,-3.5206925713647266,13.261727757738996,sem diferença clara
+Dgen,Dsr,textura,wavelet_coarse_pct,11.322260760796198,7.368461553641936,18.65378780536974,melhorou
+Dgen,Dsr,textura,wavelet_ratio,-0.09181993091623308,-0.11140586082236381,-0.031901222201470736,piorou
+Dgen,Dsr,textura,glcm_contrast_pct,4.218963869667149,1.5981758471192506,11.141981788037427,mudança pequena
+Dgen,Dsr,textura,glcm_energy_pct,33.56162440896263,14.591032001641565,39.22698886002587,melhorou
+Dgen,Dsr,textura,textura,0.0,-13.513513513513514,13.513513513513514,sem diferença clara
+Dgen,Dsr,textura,map_area_textura_alterada_pct,nan,nan,nan,n/a
+Dgen,Dsr,textura,map_corr_textura,nan,nan,nan,n/a
