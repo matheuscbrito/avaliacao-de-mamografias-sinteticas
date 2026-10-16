@@ -111,6 +111,21 @@ def nex_reading(row: dict) -> str:
     return f"{NEX_TEXT[row['nex_status']]} (Δ {number(row, 'nex_delta'):+.3f})".replace(".", ",")
 
 
+def texture_decision(row: dict) -> tuple[str, str]:
+    """Veredito da aba de textura, deliberadamente independente do brilho."""
+    reasons = []
+    fine, coarse = number(row, "wavelet_fine_pct"), number(row, "wavelet_coarse_pct")
+    contrast = number(row, "glcm_contrast_pct")
+    verdict = row.get("wavelet_verdict", "textura preservada")
+    if verdict != "textura preservada":
+        reasons.append(f"Wavelet: {verdict} (fino {fine:.0f}%, grosso {coarse:.0f}%)")
+    if row.get("texture_agreement") == "discordam":
+        reasons.append(f"GLCM × Wavelet discordam (contraste {contrast:.0f}%, fino {fine:.0f}%)")
+    if row.get("nex_status") in {"alto", "baixo"}:
+        reasons.append(f"NEx {NEX_TEXT[row['nex_status']]} (Δ {number(row, 'nex_delta'):+.3f})")
+    return ("revisão necessária", " · ".join(reasons)) if reasons else ("textura preservada", "Wavelet, GLCM e NEx dentro das faixas de referência")
+
+
 def texture_explanation(row: dict) -> str:
     energy = 100 * number(row, "glcm_energy_synthetic") / number(row, "glcm_energy_real")
     text = f"GLCM contraste {number(row, 'glcm_contrast_pct'):.0f}%; energia GLCM {energy:.0f}%; Wavelet 2 px {number(row, 'wavelet_fine_pct'):.0f}%; Wavelet 4 px {number(row, 'wavelet_coarse_pct'):.0f}%"
@@ -168,7 +183,7 @@ def glcm_tone_counts(history_dir: str, stamp: float, case_id: str, version: str)
 
 
 def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling: float | None):
-    """Real × sintética por técnica; passar o mouse num ponto mostra o corte."""
+    """Real × sintética por técnica; cada ponto abre o respectivo par."""
     specs = [
         ("glcm_contrast_real", "glcm_contrast_synthetic", "GLCM · contraste", "contraste"),
         ("glcm_energy_real", "glcm_energy_synthetic", "GLCM · energia", "energia"),
@@ -194,12 +209,16 @@ def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling:
         # entropia normalizada fica toda perto de 0,94: a partir de zero os pontos viram um borrão
         lower = .98 * min(data["real"].min(), data["sintética"].min()) if title in {"Wavelet · entropia", "NEx · assinatura espectral"} else 0
         identity = alt.Chart(pd.DataFrame({"x": [lower, upper], "y": [lower, upper]})).mark_line(color="#8a5a22", strokeDash=[4, 4]).encode(x="x:Q", y="y:Q")
+        selection = alt.selection_point(name="cut", fields=["case_id"], on="click", nearest=True, empty=False)
         points = alt.Chart(data).mark_circle(size=75, color="#0d6b61").encode(
             x=alt.X("real:Q", title=f"real · {label}", scale=alt.Scale(domain=[lower, upper])),
             y=alt.Y("sintética:Q", title=f"sintética · {label}", scale=alt.Scale(domain=[lower, upper])),
             tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("real:Q", format=".4g"), alt.Tooltip("sintética:Q", format=".4g"), alt.Tooltip("veredito:N")],
-            opacity=alt.value(.8),
-        )
+            size=alt.condition(selection, alt.value(190), alt.value(75)),
+            stroke=alt.condition(selection, alt.value("#17243b"), alt.value("#0a4f48")),
+            strokeWidth=alt.condition(selection, alt.value(1.8), alt.value(.7)),
+            opacity=alt.value(.9),
+        ).add_params(selection)
         # O título fora do canvas evita o recorte vertical do Vega quando dois
         # gráficos ocupam a mesma linha.
         panels.append((title, (identity + points).properties(height=255).configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None)))
@@ -207,12 +226,17 @@ def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling:
 
 
 def draw_charts(charts: list, per_row: int = 2) -> None:
-    """Distribui os gráficos de textura em linhas legíveis no painel."""
+    """Distribui os gráficos e devolve o corte escolhido em qualquer painel."""
+    clicked_case = None
     for start in range(0, len(charts), per_row):
         for column, item in zip(st.columns(per_row), charts[start:start + per_row]):
             title, chart = item
             column.markdown(f"#### {title}")
-            column.altair_chart(chart, use_container_width=True)
+            event = column.altair_chart(chart, use_container_width=True, on_select="rerun", selection_mode="cut", key=f"texture_cohort_{title}")
+            picked = event.selection.get("cut", [])
+            if picked:
+                clicked_case = picked[0].get("case_id")
+    return clicked_case
 
 
 def brightness_chart(rows: list[dict]):
@@ -256,7 +280,7 @@ def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
     if mode == "brilho":
         data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão oficial": official_brightness_status(row), "por quê": brightness_explanation(row), "densidade": density_reading(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"), "Wavelet LL |Δ|": ll_shift(row)} for row in rows]
     else:
-        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão do framework": final_status(row), "motivos": row["final_reasons"], "Wavelet": row.get("wavelet_verdict", "n/a"), "NEx": nex_reading(row), "GLCM contraste (%)": number(row, "glcm_contrast_pct"), "Wavelet 2 px (%)": number(row, "wavelet_fine_pct"), "Wavelet 4 px (%)": number(row, "wavelet_coarse_pct"), "NEx sintética": number(row, "nex_synthetic")} for row in rows]
+        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "leitura de textura": texture_decision(row)[0], "por quê": texture_decision(row)[1], "Wavelet": row.get("wavelet_verdict", "n/a"), "NEx": nex_reading(row), "GLCM contraste (%)": number(row, "glcm_contrast_pct"), "Wavelet 2 px (%)": number(row, "wavelet_fine_pct"), "Wavelet 4 px (%)": number(row, "wavelet_coarse_pct"), "NEx sintética": number(row, "nex_synthetic")} for row in rows]
     frame = pd.DataFrame(data)
     for column in frame.columns:
         if pd.api.types.is_numeric_dtype(frame[column]):
@@ -290,8 +314,9 @@ def show_method_cards(mode: str):
             ["GLCM · energia", "uniformidade dos pares de tons; pode subir quando a imagem fica mais lisa"],
             ["Wavelet · energia (2 + 4 px)", "quantidade total de detalhe, somando a escala fina (~2 px) e a grossa (~4 px); na tabela, as duas escalas aparecem separadas"],
             ["Wavelet · entropia", "variação/complexidade da distribuição de detalhes"],
+            ["NEx · assinatura espectral", "excesso ou falta de estrutura perto do limite de resolução; compara a sintética com a faixa P5–P95 das CTs reais"],
         ], columns=["técnica", "o que ela mede"]), hide_index=True, width="stretch")
-        st.write("**A decisão final usa as três evidências.** GLCM e Wavelet conferem a quantidade e o tipo de detalhe; NEx procura uma assinatura espectral fora da faixa dos pulmões reais. Qualquer sinal de textura ou NEx fora da faixa leva a **revisão necessária**. Só o brilho pode causar rejeição direta.")
+        st.write("**Nesta aba, só a textura decide.** A leitura vai para **revisão necessária** se a Wavelet indicar textura alterada, se GLCM e Wavelet discordarem sobre a preservação de detalhe, ou se o NEx ficar fora da faixa P5–P95 das CTs reais. O filtro de brilho não entra aqui.")
 
 
 def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, version: str, mode: str):
@@ -303,7 +328,8 @@ def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, versio
         st.markdown(f"**Densidade:** {density_reading(row)} · **Wavelet LL:** |Δ| {br(ll_shift(row))} (fração da régua)")
         choices = {"CT real × sintética (Δμ)": "delta_mu", "Densidade · pixels fora da faixa real": "densidade", "Brilho local (Wavelet LL)": "ll"}
     else:
-        st.markdown(f"**Decisão do framework: {final_status(row)}.** {row['final_reasons']}")
+        texture_status, reasons = texture_decision(row)
+        st.markdown(f"**Leitura de textura: {texture_status}.** {reasons}")
         st.markdown(f"**Wavelet:** {row.get('wavelet_verdict', 'n/a')} · **NEx:** {nex_reading(row)}")
         choices = {"GLCM · contraste": "glcm_contraste", "Wavelet · detalhe fino": "wavelet_fina", "Wavelet · detalhe grosso": "wavelet_grossa"}
     st.image(raw_pair_png(str(history_dir), stamp, case_id, version), use_container_width=True)
@@ -419,14 +445,14 @@ if mode == "brilho":
     second.metric("Densidade: pixels fora da faixa real", int(density.get("too_bright", 0) + density.get("too_dark", 0)), f"claro ou escuro demais · de {len(rows)} cortes")
     third.metric("Wavelet LL: |Δ| mediano", br(float(np.median([ll_shift(row) for row in rows]))), "brilho em baixa frequência")
 else:
-    statuses = pd.Series([final_status(row) for row in rows]).value_counts()
+    statuses = pd.Series([texture_decision(row)[0] for row in rows]).value_counts()
     nex_flags = sum(row["nex_status"] in {"alto", "baixo"} for row in rows)
     wavelet_flags = sum(row.get("wavelet_verdict") != "textura preservada" for row in rows)
     disagreements = sum(row["texture_agreement"] == "discordam" for row in rows)
     first, second, third = st.columns(3)
-    first.metric("Aprovadas pelo framework", int(statuses.get("aprovada", 0)), f"de {len(rows)} cortes")
-    second.metric("Revisão necessária", int(statuses.get("revisão necessária", 0)), "brilho, textura ou NEx")
-    third.metric("Rejeições diretas", int(statuses.get("rejeição direta", 0)), "somente brilho")
+    first.metric("Textura preservada", int(statuses.get("textura preservada", 0)), f"de {len(rows)} cortes")
+    second.metric("Revisão necessária", int(statuses.get("revisão necessária", 0)), "Wavelet, GLCM ou NEx")
+    third.metric("Brilho", "fora desta aba", "use o filtro de brilho")
     st.markdown("#### Sinais que levaram à revisão")
     first, second, third = st.columns(3)
     first.metric("Wavelet: textura alterada", wavelet_flags, "tipo e quantidade de detalhe")
@@ -440,8 +466,12 @@ if mode == "textura":
     wavelet_choice = scale_wavelet.segmented_control("Escala · energia Wavelet", ["Automática", "Até 0,01", "Até 0,02", "Até 0,05"], default="Automática", help="Wavelet usa valores muito menores do que energia GLCM; esta escolha não altera o gráfico GLCM.") or "Automática"
     glcm_ceiling = {"Automática": None, "Até 0,10": .10, "Até 0,20": .20}[glcm_choice]
     wavelet_ceiling = {"Automática": None, "Até 0,01": .01, "Até 0,02": .02, "Até 0,05": .05}[wavelet_choice]
-    st.caption("Passe o mouse num ponto para ver o corte. A linha tracejada é a identidade: real = sintética. Para abrir um corte, clique na linha dele na tabela abaixo.")
-    draw_charts(texture_chart(rows, glcm_ceiling, wavelet_ceiling))
+    st.caption("Passe o mouse num ponto para ver o corte. A linha tracejada é a identidade: real = sintética. Clique num ponto para destacá-lo e abrir as CTs brutas daquele corte.")
+    clicked_case = draw_charts(texture_chart(rows, glcm_ceiling, wavelet_ceiling))
+    if clicked_case and clicked_case != case_id:
+        st.session_state["pending_case"] = clicked_case
+        st.session_state["pending_mode"] = "textura"
+        st.rerun()
 else:
     st.markdown("#### Resposta do gatekeeper de brilho")
     st.caption("Verde = aprovada, amarelo = revisão manual e vermelho = rejeição direta. No gráfico de Sat31 não há faixa amarela: acima de 15% já reprova. Clique em um ponto para destacá-lo e abrir as CTs brutas daquele corte.")
@@ -456,7 +486,7 @@ else:
 with st.expander("Ver todos os cortes e o motivo", expanded=True):
     table = metrics_table(rows, mode)
     # reset_index: a linha clicada volta como posição, e ela precisa bater com a ordem mostrada
-    table = table.sort_values(["decisão oficial", "|Δμ|"] if mode == "brilho" else ["decisão do framework", "NEx sintética"], ascending=[True, False] if mode == "brilho" else [True, False]).reset_index(drop=True)
+    table = table.sort_values(["decisão oficial", "|Δμ|"] if mode == "brilho" else ["leitura de textura", "NEx sintética"], ascending=[True, False] if mode == "brilho" else [True, False]).reset_index(drop=True)
     table.insert(0, "em foco", np.where(table["case_id"] == case_id, "●", ""))
     st.caption("Clique numa linha para abrir o corte abaixo.")
     event = st.dataframe(table, hide_index=True, width="stretch", height=320, column_order=[column for column in table.columns if column != "case_id"],
@@ -474,7 +504,7 @@ with st.expander("Ver todos os cortes e o motivo", expanded=True):
     if mode == "brilho":
         st.caption("“Decisão oficial” usa somente |Δμ| e Sat31. Wavelet LL aparece para contexto, mas não altera a categoria.")
     else:
-        st.caption("A decisão do framework combina GLCM, Wavelet e NEx. A rejeição direta é reservada a brilho; sinais de textura ou NEx fora da faixa real pedem revisão.")
+        st.caption("A tabela ignora completamente o brilho: a revisão de textura vem apenas de Wavelet, da discordância GLCM × Wavelet ou de NEx fora da faixa real.")
     st.caption("Os pontos e linhas resumem cortes do dataset; fases do mesmo paciente não devem ser interpretadas como pacientes independentes.")
 
 show_case(board, history_dir, stamp, case_id, version, mode)
