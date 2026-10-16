@@ -39,4 +39,16 @@ A validação com defeitos conhecidos está em [`resultados/teste_decisao/resumo
   --data-dir dados/Dsr --mask-dir dados/Dgen --output-dir resultados/teste_decisao
 ```
 
+## Placar por versão do gerador
+
+Para acompanhar o modelo ao longo das iterações. Cada versão é a pasta de saída de uma iteração, gerada das **mesmas originais**; passe em ordem cronológica:
+
+```bash
+.venv/bin/python -m frameworks.texture_evaluator.placar \
+  --version v1=saidas/v1 --version v2=saidas/v2 \
+  --mask-dir dados/Dgen --output-dir outputs/placar
+```
+
+O resultado principal é `placar.md`: mediana de cada indicador com intervalo de 95%, vereditos por versão e, para cada versão, se ela melhorou, piorou ou não mudou em relação à anterior. As réguas ficam fixas nas originais da primeira versão. Exemplo e validação em [`resultados/placar_versoes/resumo.md`](../../resultados/placar_versoes/resumo.md).
+
 Depois da execução, abra `outputs/mvp/report/index.html` no navegador. Ele explica cada número, mostra os gráficos pareados real × sintética e traz uma ficha visual para cada corte analisado.
