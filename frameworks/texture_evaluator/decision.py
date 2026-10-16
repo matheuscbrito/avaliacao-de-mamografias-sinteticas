@@ -27,6 +27,65 @@ DENSITY_TEXT = {"brighter": "clareou", "darker": "escureceu", "too_bright": "cla
 FINAL_STATUSES = ("aprovada", "revisar", "rejeitar")
 
 
+# Classificação de cada métrica Wavelet, com a mesma regra do filtro de brilho:
+# a diferença sintética − original, medida em IQR daquela métrica entre as CTs
+# reais de referência. Até 1 IQR, a mudança cabe na diferença entre dois
+# pulmões reais (aprovada); entre 1 e 2, revisão; acima de 2, reprovada.
+# Vale só para a leitura de textura: o veredito final continua mandando
+# textura para revisão, nunca para rejeição direta.
+WAVELET_METRICS = {"fine": "Wavelet 2 px (textura fina)", "coarse": "Wavelet 4 px (textura grossa)", "entropy": "Wavelet entropia"}
+# a GLCM segue a mesma regra, com o IQR de cada métrica entre as originais
+GLCM_METRICS = {"contrast": "GLCM contraste", "energy": "GLCM energia"}
+METRIC_STATUSES = ("aprovada", "revisão", "reprovada")
+# NEx mantém a própria regra (sintética fora de P5–P95 das originais = revisão);
+# com poucas janelas na ROI a leitura é inconclusiva e não pesa no veredito
+NEX_STATUS = {"ok": "aprovada", "alto": "revisão", "baixo": "revisão", "inconclusivo": "inconclusivo"}
+TECHNIQUES = ("GLCM", "Wavelet", "NEx")
+
+
+def metric_status(z: float) -> str:
+    return "reprovada" if abs(z) > 2 else "revisão" if abs(z) > 1 else "aprovada"
+
+
+def worst(statuses) -> str:
+    """Pior classificação; "inconclusivo" não conta."""
+    return max((s for s in statuses if s in METRIC_STATUSES), key=METRIC_STATUSES.index, default="aprovada")
+
+
+def metric_columns(prefix: str, metrics: dict, real: dict, synthetic: dict, iqr: dict) -> dict:
+    """Valores, diferença em IQR e classificação de cada métrica de uma técnica, mais a pior delas."""
+    out = {}
+    for key in metrics:
+        z = (synthetic[key] - real[key]) / max(iqr[key], 1e-12)
+        out.update({f"{prefix}_{key}_real": real[key], f"{prefix}_{key}_synthetic": synthetic[key], f"{prefix}_{key}_z": z, f"{prefix}_{key}_status": metric_status(z)})
+    out[f"{prefix}_status"] = worst(out[f"{prefix}_{key}_status"] for key in metrics)
+    return out
+
+
+def wavelet_metric_columns(real: dict, synthetic: dict, iqr: dict) -> dict:
+    return metric_columns("wavelet", WAVELET_METRICS, real, synthetic, iqr)
+
+
+def glcm_metric_columns(real: dict, synthetic: dict, iqr: dict) -> dict:
+    return metric_columns("glcm", GLCM_METRICS, real, synthetic, iqr)
+
+
+def ll_columns(real: float, synthetic: float, iqr: float) -> dict:
+    """Brilho segundo a Wavelet (banda LL), na mesma regra de IQR. Só leitura: não entra em nenhum veredito."""
+    z = (synthetic - real) / max(iqr, 1e-12)
+    return {"wavelet_ll_z": z, "wavelet_ll_status": metric_status(z)}
+
+
+def technique_statuses(row: dict) -> dict:
+    """Classificação de cada técnica de textura neste corte."""
+    return {"GLCM": row["glcm_status"], "Wavelet": row["wavelet_status"], "NEx": NEX_STATUS[row.get("nex_status", "inconclusivo")]}
+
+
+def texture_status(row: dict) -> str:
+    """Veredito de textura: a pior das três técnicas. O brilho não entra aqui."""
+    return worst(technique_statuses(row).values())
+
+
 def _inside(value: float) -> bool:
     return TEXTURE_RANGE[0] <= value <= TEXTURE_RANGE[1]
 

@@ -17,8 +17,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import altair as alt
+from streamlit.errors import StreamlitAPIException
 
 from frameworks.texture_evaluator.placar import PlacarError, add_version, build_board, load_case, load_history, refresh_history, remove_version, technique_table, write_outputs
+from frameworks.texture_evaluator.decision import GLCM_METRICS, METRIC_STATUSES, NEX_STATUS, TECHNIQUES, WAVELET_METRICS, technique_statuses, texture_status
 from frameworks.texture_evaluator.glcm.src import quantize
 from frameworks.texture_evaluator.regional import MASK_ONLY, PAIR_MIN_CORRELATION
 from frameworks.texture_evaluator.run_mvp import context_from_dict
@@ -111,19 +113,42 @@ def nex_reading(row: dict) -> str:
     return f"{NEX_TEXT[row['nex_status']]} (Δ {number(row, 'nex_delta'):+.3f})".replace(".", ",")
 
 
-def texture_decision(row: dict) -> tuple[str, str]:
-    """Veredito da aba de textura, deliberadamente independente do brilho."""
-    reasons = []
-    fine, coarse = number(row, "wavelet_fine_pct"), number(row, "wavelet_coarse_pct")
-    contrast = number(row, "glcm_contrast_pct")
+TEXTURE_LABEL = {"aprovada": "textura preservada", "revisão": "revisão necessária", "reprovada": "reprovada"}
+TECHNIQUE_METRICS = {"GLCM": ("glcm", GLCM_METRICS), "Wavelet": ("wavelet", WAVELET_METRICS)}
+STATUS_COLORS = alt.Scale(domain=[*METRIC_STATUSES, "inconclusivo"], range=["#0b6b32", "#d9a21b", "#9f1f18", "#b8bdbb"])
+
+
+def metric_reading(row: dict, prefix: str, key: str) -> str:
+    """Classificação de uma métrica e a diferença em IQR das CTs reais (ex.: revisão (−1,4 IQR))."""
+    return f"{row[f'{prefix}_{key}_status']} ({number(row, f'{prefix}_{key}_z'):+.1f} IQR)".replace(".", ",")
+
+
+def wavelet_metric_reading(row: dict, key: str) -> str:
+    return metric_reading(row, "wavelet", key)
+
+
+def technique_reason(row: dict, technique: str) -> str:
+    """O que a técnica disse neste corte, só com as métricas fora da faixa."""
+    if technique == "NEx":
+        return "" if row["nex_status"] == "ok" else f"{NEX_TEXT[row['nex_status']]} (Δ {number(row, 'nex_delta'):+.3f})".replace(".", ",")
+    prefix, metrics = TECHNIQUE_METRICS[technique]
+    flagged = [f"{label.removeprefix(technique + ' ')} {metric_reading(row, prefix, key)}" for key, label in metrics.items() if row[f"{prefix}_{key}_status"] != "aprovada"]
     verdict = row.get("wavelet_verdict", "textura preservada")
-    if verdict != "textura preservada":
-        reasons.append(f"Wavelet: {verdict} (fino {fine:.0f}%, grosso {coarse:.0f}%)")
-    if row.get("texture_agreement") == "discordam":
-        reasons.append(f"GLCM × Wavelet discordam (contraste {contrast:.0f}%, fino {fine:.0f}%)")
-    if row.get("nex_status") in {"alto", "baixo"}:
-        reasons.append(f"NEx {NEX_TEXT[row['nex_status']]} (Δ {number(row, 'nex_delta'):+.3f})")
-    return ("revisão necessária", " · ".join(reasons)) if reasons else ("textura preservada", "Wavelet, GLCM e NEx dentro das faixas de referência")
+    if technique == "Wavelet" and flagged and verdict != "textura preservada":
+        flagged.append(f"tipo: {verdict}")
+    return ", ".join(flagged)
+
+
+def texture_decision(row: dict) -> tuple[str, str]:
+    """Veredito da aba de textura, deliberadamente independente do brilho.
+
+    GLCM, Wavelet e NEx são classificadas cada uma por conta própria; a pior
+    delas decide. GLCM e Wavelet usam a regra do filtro de brilho (diferença
+    em IQR das CTs reais: revisão > 1, reprovada > 2); NEx fora de P5–P95 das
+    CTs reais pede revisão.
+    """
+    reasons = [f"{technique}: {reason}" for technique in TECHNIQUES if (reason := technique_reason(row, technique))]
+    return TEXTURE_LABEL[texture_status(row)], " · ".join(reasons) if reasons else "GLCM, Wavelet e NEx dentro das faixas de referência"
 
 
 def texture_explanation(row: dict) -> str:
@@ -182,8 +207,8 @@ def glcm_tone_counts(history_dir: str, stamp: float, case_id: str, version: str)
     return {"real_zero": real_zero, "real_last": real_last, "synthetic_zero": synthetic_zero, "synthetic_last": synthetic_last, "last_tone": last_tone}
 
 
-def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling: float | None):
-    """Real × sintética por técnica; cada ponto abre o respectivo par."""
+def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling: float | None, technique: str):
+    """Real × sintética das métricas de uma técnica; cada ponto abre o respectivo par."""
     specs = [
         ("glcm_contrast_real", "glcm_contrast_synthetic", "GLCM · contraste", "contraste"),
         ("glcm_energy_real", "glcm_energy_synthetic", "GLCM · energia", "energia"),
@@ -192,7 +217,7 @@ def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling:
         ("nex_real", "nex_synthetic", "NEx · assinatura espectral", "NEx"),
     ]
     panels = []
-    for real_key, synthetic_key, title, label in specs:
+    for real_key, synthetic_key, title, label in (spec for spec in specs if spec[2].startswith(technique)):
         data = pd.DataFrame({
             "case_id": [row["case_id"] for row in rows],
             "corte": [case_name(row["case_id"]) for row in rows],
@@ -231,12 +256,104 @@ def draw_charts(charts: list, per_row: int = 2) -> None:
     for start in range(0, len(charts), per_row):
         for column, item in zip(st.columns(per_row), charts[start:start + per_row]):
             title, chart = item
-            column.markdown(f"#### {title}")
-            event = column.altair_chart(chart, use_container_width=True, on_select="rerun", selection_mode="cut", key=f"texture_cohort_{title}")
-            picked = event.selection.get("cut", [])
+            column.markdown(f"**{title}**")
+            picked = selectable_chart(column, chart, f"texture_cohort_{title}")
             if picked:
-                clicked_case = picked[0].get("case_id")
+                clicked_case = picked
     return clicked_case
+
+
+def selectable_chart(container, chart, key: str) -> str | None:
+    """Gráfico clicável quando o Streamlit permite; senão, o mesmo gráfico sem clique.
+
+    Algumas versões do Streamlit (ex.: 1.50) recusam seleção em gráficos com
+    camadas ou compostos; nelas o corte continua sendo aberto pela tabela.
+    """
+    try:
+        event = container.altair_chart(chart, use_container_width=True, on_select="rerun", selection_mode="cut", key=key)
+    except StreamlitAPIException:
+        container.altair_chart(chart, use_container_width=True)
+        return None
+    picked = event.selection.get("cut", [])
+    return picked[0].get("case_id") if picked else None
+
+
+def metric_chart(rows: list[dict], prefix: str, key: str):
+    """Como os gráficos do filtro de brilho: diferença em IQR por corte, com as faixas e a cor da classificação."""
+    data = pd.DataFrame({
+        "case_id": [row["case_id"] for row in rows],
+        "corte": [case_name(row["case_id"]) for row in rows],
+        "ordem": list(range(1, len(rows) + 1)),
+        "z": [number(row, f"{prefix}_{key}_z") for row in rows],
+        "% da original": [100 * number(row, f"{prefix}_{key}_synthetic") / number(row, f"{prefix}_{key}_real") for row in rows],
+        "classificação": [row[f"{prefix}_{key}_status"] for row in rows],
+    })
+    limit = max(2.6, float(data["z"].abs().max()) * 1.12)
+    scale = alt.Scale(domain=[-limit, limit])
+    colors = alt.Scale(domain=list(METRIC_STATUSES), range=["#0b6b32", "#925a10", "#9f1f18"])
+    bands = pd.DataFrame([{"início": a, "fim": b, "faixa": f} for a, b, f in ((-limit, -2, "reprovada"), (-2, -1, "revisão"), (-1, 1, "aprovada"), (1, 2, "revisão"), (2, limit, "reprovada"))])
+    band_layer = alt.Chart(bands).mark_rect(opacity=.14).encode(
+        y=alt.Y("início:Q", scale=scale, title="Δ (IQR das CTs reais)"), y2="fim:Q",
+        color=alt.Color("faixa:N", scale=alt.Scale(domain=list(METRIC_STATUSES), range=["#dff3e5", "#fff0c2", "#fde3e1"]), legend=None))
+    rules = alt.Chart(pd.DataFrame({"limite": [-2, -1, 1, 2]})).mark_rule(color="#8a5a22", opacity=.6, strokeDash=[4, 4]).encode(y=alt.Y("limite:Q", scale=scale))
+    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", nearest=True, empty=False)
+    points = alt.Chart(data).mark_circle(filled=True).encode(
+        x=alt.X("ordem:Q", title="cortes do dataset"),
+        y=alt.Y("z:Q", scale=scale, title="Δ (IQR das CTs reais)"),
+        color=alt.Color("classificação:N", scale=colors, legend=None),
+        size=alt.condition(selection, alt.value(285), alt.value(118)),
+        stroke=alt.condition(selection, alt.value("#17243b"), alt.value("#24352d")),
+        strokeWidth=alt.condition(selection, alt.value(2.2), alt.value(.9)),
+        tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("z:Q", title="diferença (IQR)", format="+.2f"), alt.Tooltip("% da original:Q", format=".0f"), alt.Tooltip("classificação:N")],
+    ).add_params(selection)
+    # escalas de cor independentes: senão as faixas (tons claros) e os pontos (tons fortes) dividem uma só escala
+    return (band_layer + rules + points).resolve_scale(color="independent").properties(height=260).configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None)
+
+
+def verdict_matrix(rows: list[dict]):
+    """Uma coluna por corte e uma linha por técnica: quem aprovou, quem pediu revisão, quem reprovou."""
+    order = sorted(rows, key=lambda row: (-METRIC_STATUSES.index(texture_status(row)), -sum(s != "aprovada" for s in technique_statuses(row).values()), row["case_id"]))
+    cells = []
+    for row in order:
+        readings = {"Textura (combinado)": (texture_status(row), texture_decision(row)[1]),
+                    **{technique: (status, technique_reason(row, technique) or "dentro da faixa") for technique, status in technique_statuses(row).items()}}
+        for line, (status, reason) in readings.items():
+            cells.append({"case_id": row["case_id"], "corte": case_name(row["case_id"]), "técnica": line, "classificação": status, "o que disse": reason})
+    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", empty=False)
+    return alt.Chart(pd.DataFrame(cells)).mark_rect(stroke="white", strokeWidth=1.5).encode(
+        x=alt.X("corte:N", sort=[case_name(row["case_id"]) for row in order], title="cortes (os mais graves à esquerda)", axis=alt.Axis(labelAngle=-60, labelFontSize=9)),
+        y=alt.Y("técnica:N", sort=["Textura (combinado)", *TECHNIQUES], title=None, axis=alt.Axis(labelFontWeight="bold", labelLimit=200)),
+        color=alt.Color("classificação:N", scale=STATUS_COLORS, legend=alt.Legend(orient="top", title=None)),
+        opacity=alt.condition(selection, alt.value(1), alt.value(.82)),
+        tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("técnica:N"), alt.Tooltip("classificação:N"), alt.Tooltip("o que disse:N")],
+    ).add_params(selection).properties(height=alt.Step(34)).configure_view(stroke=None)
+
+
+def nex_chart(rows: list[dict], reference: dict):
+    """NEx da sintética por corte, com a faixa P5–P95 das CTs reais em verde."""
+    data = pd.DataFrame({
+        "case_id": [row["case_id"] for row in rows],
+        "corte": [case_name(row["case_id"]) for row in rows],
+        "ordem": list(range(1, len(rows) + 1)),
+        "NEx sintética": [number(row, "nex_synthetic") for row in rows],
+        "NEx real": [number(row, "nex_real") for row in rows],
+        "classificação": [NEX_STATUS[row["nex_status"]] for row in rows],
+    })
+    values = [*data["NEx sintética"], reference["p5"], reference["p95"]]
+    pad = .08 * (max(values) - min(values))
+    scale = alt.Scale(domain=[min(values) - pad, max(values) + pad])
+    band = alt.Chart(pd.DataFrame({"início": [reference["p5"]], "fim": [reference["p95"]]})).mark_rect(opacity=.14, color="#2f9e57").encode(y=alt.Y("início:Q", scale=scale, title="NEx da sintética"), y2="fim:Q")
+    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", nearest=True, empty=False)
+    points = alt.Chart(data).mark_circle(filled=True).encode(
+        x=alt.X("ordem:Q", title="cortes do dataset"),
+        y=alt.Y("NEx sintética:Q", scale=scale, title="NEx da sintética"),
+        color=alt.Color("classificação:N", scale=STATUS_COLORS, legend=None),
+        size=alt.condition(selection, alt.value(285), alt.value(118)),
+        stroke=alt.condition(selection, alt.value("#17243b"), alt.value("#24352d")),
+        strokeWidth=alt.condition(selection, alt.value(2.2), alt.value(.9)),
+        tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("NEx sintética:Q", format=".3f"), alt.Tooltip("NEx real:Q", format=".3f"), alt.Tooltip("classificação:N")],
+    ).add_params(selection)
+    return (band + points).properties(height=260).configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None)
 
 
 def brightness_chart(rows: list[dict]):
@@ -278,9 +395,14 @@ def brightness_chart(rows: list[dict]):
 
 def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
     if mode == "brilho":
-        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão oficial": official_brightness_status(row), "por quê": brightness_explanation(row), "densidade": density_reading(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"), "Wavelet LL |Δ|": ll_shift(row)} for row in rows]
+        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão oficial": official_brightness_status(row), "por quê": brightness_explanation(row), "densidade": density_reading(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"), "Wavelet LL": metric_reading(row, "wavelet", "ll"), "Wavelet LL |Δ|": ll_shift(row)} for row in rows]
     else:
-        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "leitura de textura": texture_decision(row)[0], "por quê": texture_decision(row)[1], "Wavelet": row.get("wavelet_verdict", "n/a"), "NEx": nex_reading(row), "GLCM contraste (%)": number(row, "glcm_contrast_pct"), "Wavelet 2 px (%)": number(row, "wavelet_fine_pct"), "Wavelet 4 px (%)": number(row, "wavelet_coarse_pct"), "NEx sintética": number(row, "nex_synthetic")} for row in rows]
+        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "leitura de textura": texture_decision(row)[0],
+                 **technique_statuses(row), "por quê": texture_decision(row)[1],
+                 "GLCM contraste": metric_reading(row, "glcm", "contrast"), "GLCM energia": metric_reading(row, "glcm", "energy"),
+                 "Wavelet 2 px": wavelet_metric_reading(row, "fine"), "Wavelet 4 px": wavelet_metric_reading(row, "coarse"), "Wavelet entropia": wavelet_metric_reading(row, "entropy"),
+                 "tipo (Wavelet)": row.get("wavelet_verdict", "n/a"), "NEx leitura": nex_reading(row),
+                 "GLCM contraste (%)": number(row, "glcm_contrast_pct"), "Wavelet 2 px (% da original)": number(row, "wavelet_fine_pct"), "Wavelet 4 px (% da original)": number(row, "wavelet_coarse_pct"), "NEx sintética": number(row, "nex_synthetic")} for row in rows]
     frame = pd.DataFrame(data)
     for column in frame.columns:
         if pd.api.types.is_numeric_dtype(frame[column]):
@@ -306,7 +428,7 @@ def show_method_cards(mode: str):
         st.success("**Aprovada** — |Δμ| ≤ 0,314 **e** Sat31 ≤ 15%.")
         st.warning("**Revisão manual** — 0,314 < |Δμ| ≤ 0,629 **e** Sat31 ≤ 15%.")
         st.error("**Reprovada diretamente** — |Δμ| > 0,629 **ou** Sat31 > 15%.")
-        st.info("**Densidade** (pixels fora da faixa P1–P99 real e deslocamento da mediana) e **Wavelet LL** (brilho em baixa frequência, janela 4×4 px) complementam a inspeção. Nenhuma das duas altera a categoria oficial, que depende apenas de |Δμ| e Sat31.")
+        st.info("**Densidade** (pixels fora da faixa P1–P99 real e deslocamento da mediana) e **brilho segundo a Wavelet** (banda LL: média local de 4×4 px, só o brilho, sem a textura) complementam a inspeção. A Wavelet LL é classificada como as métricas de textura: Δ = LL da sintética − LL da original, em IQR da LL entre as CTs reais (até 1 aprovada, 1–2 revisão, acima de 2 reprovada). Nenhuma das duas altera a categoria oficial, que depende apenas de |Δμ| e Sat31.")
     else:
         st.markdown("#### Técnicas de textura usadas")
         st.dataframe(pd.DataFrame([
@@ -316,7 +438,22 @@ def show_method_cards(mode: str):
             ["Wavelet · entropia", "variação/complexidade da distribuição de detalhes"],
             ["NEx · assinatura espectral", "excesso ou falta de estrutura perto do limite de resolução; compara a sintética com a faixa P5–P95 das CTs reais"],
         ], columns=["técnica", "o que ela mede"]), hide_index=True, width="stretch")
-        st.write("**Nesta aba, só a textura decide.** A leitura vai para **revisão necessária** se a Wavelet indicar textura alterada, se GLCM e Wavelet discordarem sobre a preservação de detalhe, ou se o NEx ficar fora da faixa P5–P95 das CTs reais. O filtro de brilho não entra aqui.")
+        st.markdown("#### Como a textura é classificada")
+        st.write("**Nesta aba, só a textura decide; o brilho não entra.** Cada técnica dá a sua classificação. O **veredito de textura** é a pior das três.")
+        glcm, wavelet, nex = st.columns(3)
+        with glcm:
+            st.markdown("**GLCM** · contraste e energia")
+            st.caption("Diferença sintética − real de cada métrica, em IQR dessa métrica entre as CTs reais. A pior métrica dá a classificação da GLCM.")
+        with wavelet:
+            st.markdown("**Wavelet** · 2 px, 4 px e entropia")
+            st.caption("A mesma regra da GLCM. O “tipo” (borrou, ruído, perdeu contraste…) descreve a mudança, não decide.")
+        with nex:
+            st.markdown("**NEx** · assinatura espectral")
+            st.caption("NEx da sintética fora da faixa P5–P95 das CTs reais pede revisão. Com poucas janelas na ROI, fica inconclusivo e não pesa.")
+        first, second, third = st.columns(3)
+        first.metric("Aprovada", "|Δ| ≤ 1 IQR", "dentro da variação real")
+        second.metric("Revisão", "1 < |Δ| ≤ 2 IQR", "pede inspeção")
+        third.metric("Reprovada", "|Δ| > 2 IQR", "fora da variação real")
 
 
 def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, version: str, mode: str):
@@ -325,12 +462,22 @@ def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, versio
     st.subheader(f"Par em foco · {case_name(case_id)}")
     if mode == "brilho":
         st.markdown(f"**Gatekeeper oficial: {official_brightness_status(row)}.** {brightness_explanation(row)}")
-        st.markdown(f"**Densidade:** {density_reading(row)} · **Wavelet LL:** |Δ| {br(ll_shift(row))} (fração da régua)")
+        st.markdown(f"**Densidade:** {density_reading(row)} · **Brilho segundo a Wavelet (LL):** {metric_reading(row, 'wavelet', 'll')}")
         choices = {"CT real × sintética (Δμ)": "delta_mu", "Densidade · pixels fora da faixa real": "densidade", "Brilho local (Wavelet LL)": "ll"}
     else:
-        texture_status, reasons = texture_decision(row)
-        st.markdown(f"**Leitura de textura: {texture_status}.** {reasons}")
-        st.markdown(f"**Wavelet:** {row.get('wavelet_verdict', 'n/a')} · **NEx:** {nex_reading(row)}")
+        verdict, _ = texture_decision(row)
+        st.markdown(f"**Veredito de textura: {verdict}** — a pior classificação entre GLCM, Wavelet e NEx.")
+        statuses = technique_statuses(row)
+        for column, technique in zip(st.columns(3), TECHNIQUES):
+            box = column.container(border=True)
+            box.markdown(f"**{technique}: {statuses[technique]}**")
+            if technique == "NEx":
+                box.markdown(f"- {nex_reading(row)}")
+            else:
+                prefix, metrics = TECHNIQUE_METRICS[technique]
+                box.markdown("\n".join(f"- {label.removeprefix(technique + ' ')}: {metric_reading(row, prefix, key)}" for key, label in metrics.items()))
+            if technique == "Wavelet":
+                box.caption(f"tipo de mudança (descreve, não decide): {row.get('wavelet_verdict', 'n/a')}")
         choices = {"GLCM · contraste": "glcm_contraste", "Wavelet · detalhe fino": "wavelet_fina", "Wavelet · detalhe grosso": "wavelet_grossa"}
     st.image(raw_pair_png(str(history_dir), stamp, case_id, version), use_container_width=True)
     st.caption("CTs brutas lado a lado — sem mapa, máscara ou métrica sobreposta. A mesma janela de visualização é usada nas duas imagens para permitir comparação direta.")
@@ -391,9 +538,9 @@ if history is None:
             st.error(str(error))
     st.stop()
 
-if "nex_reference" not in history["calibration"]:
-    st.warning("Este histórico foi calculado antes da integração do NEx. Recalcule as versões para aplicar a faixa real da ROI aos resultados.")
-    if st.button("Recalcular versões com NEx", type="primary"):
+if any(key not in history["calibration"] for key in ("nex_reference", "wavelet_iqr", "glcm_iqr", "ll_iqr")):
+    st.warning("Este histórico foi calculado antes da integração do NEx ou da classificação por métrica GLCM/Wavelet. Recalcule as versões para aplicar as faixas reais aos resultados.")
+    if st.button("Recalcular versões", type="primary"):
         with st.spinner("Recalculando GLCM, Wavelet e NEx..."):
             st.success(refresh_history(history_dir))
         st.rerun()
@@ -427,8 +574,9 @@ with st.sidebar:
         selection = st.selectbox("Mostrar cortes", ["todos", "aprovada", "revisão manual", "rejeição direta"], key="case_filter_brilho")
         choices = [row["case_id"] for row in rows if selection == "todos" or official_brightness_status(row) == selection]
     else:
-        selection = st.selectbox("Mostrar cortes", ["todos", *sorted({row.get("wavelet_verdict", "n/a") for row in rows})], key="case_filter_textura")
-        choices = [row["case_id"] for row in rows if selection == "todos" or row.get("wavelet_verdict") == selection]
+        selection = st.selectbox("Mostrar cortes", ["todos", *TEXTURE_LABEL.values(), *(f"{technique} fora da faixa" for technique in TECHNIQUES)], key="case_filter_textura")
+        choices = [row["case_id"] for row in rows if selection == "todos" or texture_decision(row)[0] == selection
+                   or selection.endswith("fora da faixa") and technique_statuses(row)[selection.split()[0]] in {"revisão", "reprovada"}]
     case_id = st.selectbox("Corte para inspecionar", choices, format_func=case_name, key="case_selector")
 
 show_method_cards(mode)
@@ -443,31 +591,61 @@ if mode == "brilho":
     first, second, third = st.columns(3)
     first.metric("Densidade: mediana deslocada", int(density.get("brighter", 0) + density.get("darker", 0)), f"clareou ou escureceu · de {len(rows)} cortes")
     second.metric("Densidade: pixels fora da faixa real", int(density.get("too_bright", 0) + density.get("too_dark", 0)), f"claro ou escuro demais · de {len(rows)} cortes")
-    third.metric("Wavelet LL: |Δ| mediano", br(float(np.median([ll_shift(row) for row in rows]))), "brilho em baixa frequência")
+    ll = pd.Series([row["wavelet_ll_status"] for row in rows]).value_counts()
+    third.metric("Wavelet LL: fora da faixa", int(ll.get("revisão", 0) + ll.get("reprovada", 0)), " · ".join(f"{int(ll.get(status, 0))} {status}" for status in METRIC_STATUSES), delta_color="off")
 else:
     statuses = pd.Series([texture_decision(row)[0] for row in rows]).value_counts()
-    nex_flags = sum(row["nex_status"] in {"alto", "baixo"} for row in rows)
-    wavelet_flags = sum(row.get("wavelet_verdict") != "textura preservada" for row in rows)
-    disagreements = sum(row["texture_agreement"] == "discordam" for row in rows)
-    first, second, third = st.columns(3)
+    first, second, third, fourth = st.columns(4)
     first.metric("Textura preservada", int(statuses.get("textura preservada", 0)), f"de {len(rows)} cortes")
-    second.metric("Revisão necessária", int(statuses.get("revisão necessária", 0)), "Wavelet, GLCM ou NEx")
-    third.metric("Brilho", "fora desta aba", "use o filtro de brilho")
-    st.markdown("#### Sinais que levaram à revisão")
-    first, second, third = st.columns(3)
-    first.metric("Wavelet: textura alterada", wavelet_flags, "tipo e quantidade de detalhe")
-    second.metric("NEx fora da faixa real", nex_flags, "assinatura espectral na ROI")
-    third.metric("GLCM × Wavelet discordam", disagreements, "precisa de inspeção")
+    second.metric("Revisão necessária", int(statuses.get("revisão necessária", 0)), "alguma técnica entre 1 e 2 IQR")
+    third.metric("Reprovadas", int(statuses.get("reprovada", 0)), "alguma técnica > 2 IQR")
+    fourth.metric("Brilho", "fora desta aba", "use o filtro de brilho")
+    st.markdown("#### Quem apontou o quê")
+    for column, technique in zip(st.columns(3), TECHNIQUES):
+        counts = pd.Series([technique_statuses(row)[technique] for row in rows]).value_counts()
+        column.metric(f"{technique}: fora da faixa", int(counts.get("revisão", 0) + counts.get("reprovada", 0)),
+                      " · ".join(f"{int(counts.get(status, 0))} {status}" for status in (*METRIC_STATUSES, "inconclusivo") if counts.get(status, 0)), delta_color="off")
 
 if mode == "textura":
-    st.markdown("#### Relação entre CT real e sintética")
-    scale_glcm, scale_wavelet = st.columns(2)
-    glcm_choice = scale_glcm.segmented_control("Escala · energia GLCM", ["Automática", "Até 0,10", "Até 0,20"], default="Automática", help="Use a mesma régua ao alternar Dsr e Dgen.") or "Automática"
-    wavelet_choice = scale_wavelet.segmented_control("Escala · energia Wavelet", ["Automática", "Até 0,01", "Até 0,02", "Até 0,05"], default="Automática", help="Wavelet usa valores muito menores do que energia GLCM; esta escolha não altera o gráfico GLCM.") or "Automática"
-    glcm_ceiling = {"Automática": None, "Até 0,10": .10, "Até 0,20": .20}[glcm_choice]
-    wavelet_ceiling = {"Automática": None, "Até 0,01": .01, "Até 0,02": .02, "Até 0,05": .05}[wavelet_choice]
-    st.caption("Passe o mouse num ponto para ver o corte. A linha tracejada é a identidade: real = sintética. Clique num ponto para destacá-lo e abrir as CTs brutas daquele corte.")
-    clicked_case = draw_charts(texture_chart(rows, glcm_ceiling, wavelet_ceiling))
+    st.markdown("#### Veredito por corte e por técnica")
+    st.caption("Cada coluna é um corte. A primeira linha é o veredito de textura; as outras mostram o que cada técnica disse. Passe o mouse para ver o motivo e clique para abrir o corte.")
+    clicked_case = selectable_chart(st, verdict_matrix(rows), "verdict_matrix")
+    st.markdown("#### Detalhe de cada técnica")
+    glcm_tab, wavelet_tab, nex_tab = st.tabs(["GLCM", "Wavelet", "NEx"])
+    with glcm_tab:
+        st.caption("Cada ponto é um corte, na diferença sintética − real medida em IQR das CTs reais. Verde = aprovada, amarelo = revisão, vermelho = reprovada.")
+        for column, (key, label) in zip(st.columns(len(GLCM_METRICS)), GLCM_METRICS.items()):
+            counts = pd.Series([row[f"glcm_{key}_status"] for row in rows]).value_counts()
+            column.markdown(f"**{label}**")
+            column.caption(" · ".join(f"{int(counts.get(status, 0))} {status}" for status in METRIC_STATUSES))
+            clicked_case = selectable_chart(column, metric_chart(rows, "glcm", key), f"glcm_metric_{key}") or clicked_case
+        st.markdown("##### Real × sintética")
+        glcm_choice = st.segmented_control("Escala · energia GLCM", ["Automática", "Até 0,10", "Até 0,20"], default="Automática", help="Use a mesma régua ao alternar Dsr e Dgen.") or "Automática"
+        glcm_ceiling = {"Automática": None, "Até 0,10": .10, "Até 0,20": .20}[glcm_choice]
+        st.caption("A linha tracejada é a identidade: real = sintética.")
+        clicked_case = draw_charts(texture_chart(rows, glcm_ceiling, None, "GLCM")) or clicked_case
+    with wavelet_tab:
+        st.caption("Cada ponto é um corte, na diferença sintética − real medida em IQR das CTs reais. Verde = aprovada, amarelo = revisão, vermelho = reprovada.")
+        for column, (key, label) in zip(st.columns(len(WAVELET_METRICS)), WAVELET_METRICS.items()):
+            counts = pd.Series([row[f"wavelet_{key}_status"] for row in rows]).value_counts()
+            column.markdown(f"**{label}**")
+            column.caption(" · ".join(f"{int(counts.get(status, 0))} {status}" for status in METRIC_STATUSES))
+            clicked_case = selectable_chart(column, metric_chart(rows, "wavelet", key), f"wavelet_metric_{key}") or clicked_case
+        kinds = pd.Series([row.get("wavelet_verdict", "n/a") for row in rows]).value_counts()
+        st.caption("Tipo de mudança (descreve, não decide): " + " · ".join(f"{int(count)} {kind}" for kind, count in kinds.items()))
+        st.markdown("##### Real × sintética")
+        wavelet_choice = st.segmented_control("Escala · energia Wavelet", ["Automática", "Até 0,01", "Até 0,02", "Até 0,05"], default="Automática", help="Wavelet usa valores muito menores do que energia GLCM.") or "Automática"
+        wavelet_ceiling = {"Automática": None, "Até 0,01": .01, "Até 0,02": .02, "Até 0,05": .05}[wavelet_choice]
+        st.caption("A linha tracejada é a identidade: real = sintética.")
+        clicked_case = draw_charts(texture_chart(rows, None, wavelet_ceiling, "Wavelet")) or clicked_case
+    with nex_tab:
+        reference = history["calibration"]["nex_reference"]
+        counts = pd.Series([NEX_STATUS[row["nex_status"]] for row in rows]).value_counts()
+        st.caption(f"NEx da sintética por corte. A faixa verde é P5–P95 das CTs reais ({br(reference['p5'])} a {br(reference['p95'])}); fora dela, revisão. Cinza = inconclusivo (poucas janelas na ROI). "
+                   + " · ".join(f"{int(counts.get(status, 0))} {status}" for status in (*METRIC_STATUSES, "inconclusivo") if counts.get(status, 0)))
+        clicked_case = selectable_chart(st, nex_chart(rows, reference), "nex_metric") or clicked_case
+        st.markdown("##### Real × sintética")
+        clicked_case = draw_charts(texture_chart(rows, None, None, "NEx"), per_row=2) or clicked_case
     if clicked_case and clicked_case != case_id:
         st.session_state["pending_case"] = clicked_case
         st.session_state["pending_mode"] = "textura"
@@ -475,14 +653,17 @@ if mode == "textura":
 else:
     st.markdown("#### Resposta do gatekeeper de brilho")
     st.caption("Verde = aprovada, amarelo = revisão manual e vermelho = rejeição direta. No gráfico de Sat31 não há faixa amarela: acima de 15% já reprova. Clique em um ponto para destacá-lo e abrir as CTs brutas daquele corte.")
-    event = st.altair_chart(brightness_chart(rows), use_container_width=True, on_select="rerun", selection_mode="cut", key="brightness_cohort")
-    picked = event.selection.get("cut", [])
-    if picked:
-        clicked_case = picked[0].get("case_id")
-        if clicked_case and clicked_case != case_id:
-            st.session_state["pending_case"] = clicked_case
-            st.session_state["pending_mode"] = "brilho"
-            st.rerun()
+    clicked_case = selectable_chart(st, brightness_chart(rows), "brightness_cohort")
+    st.markdown("#### Brilho segundo a Wavelet (LL)")
+    official = {"approved": "aprovada", "manual_review": "revisão", "hard_reject": "reprovada"}
+    agree = sum(official[row["brightness_status"]] == row["wavelet_ll_status"] for row in rows)
+    st.caption(f"Cada ponto é um corte: Δ = brilho LL da sintética − brilho LL da original, em IQR da LL entre as CTs reais. Mesmas cores e faixas do filtro oficial. "
+               f"Só leitura: não muda a decisão oficial. Concorda com o filtro oficial em {agree} de {len(rows)} cortes.")
+    clicked_case = selectable_chart(st, metric_chart(rows, "wavelet", "ll"), "wavelet_ll") or clicked_case
+    if clicked_case and clicked_case != case_id:
+        st.session_state["pending_case"] = clicked_case
+        st.session_state["pending_mode"] = "brilho"
+        st.rerun()
 with st.expander("Ver todos os cortes e o motivo", expanded=True):
     table = metrics_table(rows, mode)
     # reset_index: a linha clicada volta como posição, e ela precisa bater com a ordem mostrada
@@ -504,7 +685,7 @@ with st.expander("Ver todos os cortes e o motivo", expanded=True):
     if mode == "brilho":
         st.caption("“Decisão oficial” usa somente |Δμ| e Sat31. Wavelet LL aparece para contexto, mas não altera a categoria.")
     else:
-        st.caption("A tabela ignora completamente o brilho: a revisão de textura vem apenas de Wavelet, da discordância GLCM × Wavelet ou de NEx fora da faixa real.")
+        st.caption("A tabela ignora completamente o brilho. As colunas GLCM, Wavelet e NEx mostram a classificação de cada técnica; “leitura de textura” é a pior delas.")
     st.caption("Os pontos e linhas resumem cortes do dataset; fases do mesmo paciente não devem ser interpretadas como pacientes independentes.")
 
 show_case(board, history_dir, stamp, case_id, version, mode)

@@ -1,6 +1,6 @@
 # Avaliador de textura
 
-O MVP reúne GLCM e Wavelet nos mesmos pares e na mesma ROI erodida. Ele salva tabela única e prévias visuais do par real/sintético/ROI.
+O MVP reúne GLCM, Wavelet e NEx nos mesmos pares e na mesma ROI erodida. Ele salva tabela única e prévias visuais do par real/sintético/ROI.
 
 Na raiz do repositório, execute:
 
@@ -22,7 +22,7 @@ GLCM e Wavelet usam a **mesma régua** de clipping: Tukey k=3 calibrada nos pixe
   --data-dir dados/Dsr --mask-dir dados/Dgen --output-dir resultados/regua_unica
 ```
 
-O brilho tem duas leituras lado a lado: o filtro do contrato (`brightness_status`, por Δμ e Sat31) e o eixo de densidade da Wavelet (`density_status`, `density_median_shift_iqr`). Como as duas convivem ainda será decidido. A terceira métrica está reservada, sem implementação especulativa.
+O brilho tem duas leituras lado a lado: o filtro do contrato (`brightness_status`, por Δμ e Sat31) e o eixo de densidade da Wavelet (`density_status`, `density_median_shift_iqr`). Como as duas convivem ainda será decidido. A banda LL da Wavelet também dá uma leitura de brilho (ver abaixo). O NEx mede excesso ou falta de estrutura perto do limite de resolução, na mesma ROI.
 
 ## Decisão final
 
@@ -31,6 +31,23 @@ Cada corte sai com `final_status` (`aprovada`, `revisar` ou `rejeitar`) e os mot
 1. **Brilho:** só o filtro do contrato rejeita; a densidade manda para revisão.
 2. **Quantidade de detalhe:** contraste GLCM e energia fina Wavelet devem concordar (80–125% da original); se discordarem, o corte vai para revisão.
 3. **Tipo de defeito:** veredito Wavelet diferente de "textura preservada" manda para revisão.
+4. **NEx:** fora de P5–P95 das originais manda para revisão; poucas janelas na ROI é inconclusivo.
+
+## Classificação por técnica (painel)
+
+O painel lê cada técnica separadamente, sem mudar o veredito final acima. Todas as métricas com régua de IQR usam a mesma regra do filtro de brilho: a diferença sintética − original, dividida pelo IQR daquela métrica entre as CTs reais de referência (calculado na primeira versão e congelado no histórico).
+
+**Veredito de textura (aba de textura do painel).** GLCM, Wavelet e NEx são classificadas cada uma por conta própria, e o veredito de textura é a **pior das três** (`decision.texture_status`). O brilho não entra.
+
+| Técnica | Métricas | Regra |
+|---|---|---|
+| GLCM | contraste, energia | diferença sintética − original em IQR da métrica entre as CTs reais (`glcm_iqr`): até 1 **aprovada**, 1–2 **revisão**, acima de 2 **reprovada**; a pior métrica decide |
+| Wavelet | 2 px, 4 px, entropia | a mesma regra (`wavelet_iqr`); o "tipo" (borrou, ruído…) descreve, não decide |
+| NEx | NEx na ROI | fora de P5–P95 das CTs reais = **revisão**; poucas janelas = inconclusivo, não pesa |
+
+**Brilho segundo a Wavelet (modo de brilho do painel).** A banda LL (média local de 4×4 px, só o brilho) recebe a mesma regra: Δ = LL da sintética − LL da original, em IQR da LL entre as CTs reais (`ll_iqr`; colunas `wavelet_ll_z` e `wavelet_ll_status`). É só leitura, ao lado do filtro oficial (Δμ, Sat31), e não muda nenhuma decisão.
+
+Colunas: `glcm_*_z`, `glcm_*_status`, `glcm_status`, `wavelet_*_z`, `wavelet_*_status`, `wavelet_status` e `nex_status`. O painel mostra uma matriz "quem disse o quê" (corte × técnica) e uma aba por técnica com os gráficos de cada métrica. A reprovação vale só na leitura de textura; o veredito final acima continua mandando textura para revisão. No Dsr: 8 preservadas, 29 revisão, 0 reprovadas; no Dgen: 2, 26 e 9. A regra é branda porque a textura varia muito entre cortes reais (o IQR do 2 px é ~47% da mediana).
 
 A validação com defeitos conhecidos está em [`resultados/teste_decisao/resumo.md`](../../resultados/teste_decisao/resumo.md):
 
@@ -67,5 +84,5 @@ Depois da execução, abra `outputs/mvp/report/index.html` no navegador. Ele exp
 ## Próximos passos
 
 - **Comparar com pulmões reais, não só com a original do par.** Hoje brilho e textura são medidos contra a original de cada par. Para um gerador que cria um pulmão novo (modo só máscara, como o Dgen), essa original é outro pulmão no mesmo contorno, e o que compara ponto a ponto fica como n/a. Um modo "comparado com pulmões reais" mediria se cada corte (e cada bloco do mapa) cabe na faixa de variação das originais reais. Ele valeria igualmente para qualquer gerador, pareado ou não, e acabaria com o n/a. O modo atual, comparado com a original, ficaria como leitura extra quando a anatomia é a mesma.
-- Calibrar os limites de textura e da checagem do par com avaliação visual de alguém da área.
-- Integrar a terceira métrica (NEx) e avaliar a qualidade dos nódulos. A origem da assinatura NEx no Dsr já foi localizada na difusão/amostragem, não no AEKL ([`resultados/origem_assinatura_nex/resumo.md`](../../resultados/origem_assinatura_nex/resumo.md)); falta saber se ela prejudica o data augmentation. A faixa real do NEx na ROI do MVP está em [`resultados/nex_referencia_roi/resumo.md`](../../resultados/nex_referencia_roi/resumo.md) (script `nex_referencia.py`).
+- Calibrar os limites de textura e da checagem do par com avaliação visual de alguém da área. A regra de 1/2 IQR é branda; 1,5/2,5 IQR é a alternativa mais rígida a testar.
+- Avaliar a qualidade dos nódulos e se a assinatura NEx prejudica o data augmentation. A origem da assinatura NEx no Dsr já foi localizada na difusão/amostragem, não no AEKL ([`resultados/origem_assinatura_nex/resumo.md`](../../resultados/origem_assinatura_nex/resumo.md)). A faixa real do NEx na ROI do MVP está em [`resultados/nex_referencia_roi/resumo.md`](../../resultados/nex_referencia_roi/resumo.md) (script `nex_referencia.py`).
