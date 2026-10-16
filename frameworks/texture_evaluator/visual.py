@@ -32,8 +32,8 @@ TECHNIQUE_FIGURES = {
     "delta_mu": "Imagem na mesma janela de exibição; o título traz a média do pulmão e o Δμ.",
     "densidade": "Vermelho: pixels acima do P99 do pulmão real; azul: abaixo do P1. É o que a densidade conta.",
     "ll": "Banda LL da wavelet: a imagem vista em média local de 4×4 px, ou seja, só o brilho, sem a textura.",
-    "wavelet_fina": "Quanto detalhe a wavelet acha a ~2 px em cada ponto (preto = liso, branco = muito detalhe). Borrar escurece esta imagem.",
-    "wavelet_grossa": "Quanto detalhe a wavelet acha a ~4 px em cada ponto (preto = liso, branco = muito detalhe).",
+    "wavelet_fina": "Energia do nível mais fino da wavelet (~2 px), pixel a pixel, dentro da máscara do pulmão e sobre a CT inteira (escuro = liso, amarelo = muito detalhe). Mesma escala em todas as colunas: borrar apaga os pontos claros.",
+    "wavelet_grossa": "Energia do nível grosso da wavelet (~4 px), pixel a pixel, dentro da máscara do pulmão e sobre a CT inteira (escuro = liso, amarelo = muito detalhe). Mesma escala em todas as colunas.",
     "glcm_contraste": "Diferença de tom entre cada pixel e seus vizinhos, na régua de 32 tons da GLCM (média local de 5×5 px).",
 }
 MAP_LAYERS = {
@@ -83,11 +83,14 @@ def _upsample(band: np.ndarray, factor: int, shape) -> np.ndarray:
 
 
 def _detail(image: np.ndarray, ruler: dict, level: int) -> np.ndarray:
-    """Amplitude do detalhe wavelet em cada ponto: nível 1 = ~2 px (fino), nível 2 = ~4 px (grosso)."""
+    """Energia do detalhe wavelet em cada ponto (média de LH², HL², HH²): nível 1 = ~2 px (fino), nível 2 = ~4 px (grosso).
+
+    É a mesma energia que entra no score, antes de ser resumida no pulmão.
+    """
     normalised = (np.clip(image, ruler["p1"], ruler["p99"]) - ruler["p1"]) / (ruler["p99"] - ruler["p1"])
     coeffs = pywt.wavedec2(normalised, "haar", level=2, mode="periodization")
     bands = coeffs[2] if level == 1 else coeffs[1]
-    return _upsample(np.sqrt(np.mean([band**2 for band in bands], axis=0)), 2**level, image.shape)
+    return _upsample(np.mean([band**2 for band in bands], axis=0), 2**level, image.shape)
 
 
 def _ll(image: np.ndarray, ruler: dict) -> np.ndarray:
@@ -122,6 +125,21 @@ def technique_figure(history_dir: Path, case_id: str, technique: str, rows: dict
             axis.imshow(image, **window)
             mean = image[mask].mean()
             axis.set_title(f"{name}\nmédia {mean:.3f}" + ("" if name == "Original" else f" · Δμ {mean - base:+.3f}"), fontsize=9)
+    elif technique in ("wavelet_fina", "wavelet_grossa"):
+        # como em wavelet/src/visualize_wavelet_example.py: CT inteira em cinza e a energia por pixel em cima, só no pulmão
+        level = 1 if technique == "wavelet_fina" else 2
+        energies = [_inside(_detail(image, ctx.ruler, level), mask) for image in images]
+        high = np.nanpercentile(energies[0], 99)
+        column = "wavelet_fine_pct" if level == 1 else "wavelet_coarse_pct"
+        body = dict(cmap="gray", vmin=np.percentile(original, 1), vmax=np.percentile(original, 99))
+        for axis, name, image, energy in zip(axes, names, images, energies):
+            axis.imshow(image, **body)
+            shown = axis.imshow(energy, cmap="inferno", vmin=0, vmax=high, alpha=.85)
+            axis.set_title(name if name == "Original" else f"{name}\n{float(rows[name][column]):.0f}% da original", fontsize=9)
+        label = f"energia do detalhe a ~{2 ** level} px"
+        # imagem inteira, sem recorte no pulmão, para ver o mapa dentro da anatomia
+        fig.colorbar(shown, ax=list(axes), shrink=.8, pad=.01, label=label)
+        return fig
     elif technique == "densidade":
         for axis, name, image in zip(axes, names, images):
             axis.imshow(image, **window)
@@ -135,14 +153,12 @@ def technique_figure(history_dir: Path, case_id: str, technique: str, rows: dict
     else:
         maps = {
             "ll": lambda image: _ll(image, ctx.ruler),
-            "wavelet_fina": lambda image: _detail(image, ctx.ruler, 1),
-            "wavelet_grossa": lambda image: _detail(image, ctx.ruler, 2),
             "glcm_contraste": lambda image: _local_contrast(image, mask, ctx.scale),
         }[technique]
         values = [_inside(maps(image), mask) for image in images]
         low, high = (np.nanpercentile(values[0], 1), np.nanpercentile(values[0], 99)) if technique == "ll" else (0, np.nanpercentile(values[0], 99))
-        column = {"ll": "abs_delta_ll", "wavelet_fina": "wavelet_fine_pct", "wavelet_grossa": "wavelet_coarse_pct", "glcm_contraste": "glcm_contrast_pct"}[technique]
-        label = {"ll": "brilho local", "glcm_contraste": "diferença² de tom entre vizinhos"}.get(technique, "amplitude do detalhe")
+        column = {"ll": "abs_delta_ll", "glcm_contraste": "glcm_contrast_pct"}[technique]
+        label = {"ll": "brilho local", "glcm_contraste": "diferença² de tom entre vizinhos"}[technique]
         for axis, name, value in zip(axes, names, values):
             shown = axis.imshow(value, cmap="gray", vmin=low, vmax=high)
             if name == "Original":
