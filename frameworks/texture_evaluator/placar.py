@@ -44,14 +44,11 @@ from typing import Callable, NamedTuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.colors import ListedColormap
-from matplotlib.patches import Patch, Rectangle
 
 from wavelet.src.load_data import CasePaths, discover_cases
-from wavelet.src.mapa_regioes import VERDICT_COLORS, VERDICTS
 from wavelet.src.run_pipeline import write_csv
 from wavelet.src.validate_cases import ValidCase, validate_case
-from frameworks.texture_evaluator.regional import MASK_ONLY, apply_pair_check, regional
+from frameworks.texture_evaluator.regional import apply_pair_check
 from frameworks.texture_evaluator.run_mvp import calibrate, context_from_dict, context_to_dict, evaluate_pair
 
 BOOTSTRAP = 2000
@@ -61,7 +58,8 @@ GROUPS = {"final": "Veredito final", "brilho": "Brilho", "textura": "Textura"}
 
 class Indicator(NamedTuple):
     key: str
-    label: str
+    label: str        # a técnica, como aparece na tabela
+    meaning: str      # o que ela mede, em linguagem simples
     group: str
     ideal: float
     unit: str
@@ -70,23 +68,36 @@ class Indicator(NamedTuple):
     min_change: float
     # None: mediana da coluna `key`; função: % dos cortes em que ela é verdadeira
     test: Callable[[dict], bool] | None = None
+    # figura de visual.py que mostra o que a técnica enxerga (None: sem figura)
+    image: str | None = None
 
 
 # o ideal é a sintética igual à original
 INDICATORS = (
-    Indicator("aprovada", "Aprovadas", "final", 100.0, "% dos cortes", 5.0, lambda row: row["final_status"] == "aprovada"),
-    Indicator("abs_delta_mu", "|Δμ| (desvio de brilho)", "brilho", 0.0, "|sintética − original|", .05),
-    Indicator("brilho", "Brilho sinalizado", "brilho", 0.0, "% dos cortes", 5.0, lambda row: row["brightness_status"] != "approved" or row["density_status"] != "ok"),
-    Indicator("map_area_brilho_local_pct", "Área com brilho local alterado", "brilho", 0.0, "% do pulmão", 5.0),
-    Indicator("wavelet_fine_pct", "Detalhe fino (Wavelet)", "textura", 100.0, "% da original", 5.0),
-    Indicator("wavelet_coarse_pct", "Detalhe grosso (Wavelet)", "textura", 100.0, "% da original", 5.0),
-    Indicator("wavelet_ratio", "Razão fino/grosso", "textura", 1.0, "1 = sem borrar nem ruído", .05),
-    Indicator("glcm_contrast_pct", "Contraste GLCM", "textura", 100.0, "% da original", 5.0),
-    Indicator("textura", "Textura alterada", "textura", 0.0, "% dos cortes", 5.0, lambda row: row["wavelet_verdict"] != "textura preservada"),
-    Indicator("map_area_textura_alterada_pct", "Área com textura alterada", "textura", 0.0, "% do pulmão", 5.0),
-    Indicator("map_corr_textura", "Correlação espacial da textura", "textura", 1.0, "1 = textura nos mesmos lugares", .05),
+    Indicator("aprovada", "Veredito final", "cortes aprovados (sem sinal de brilho nem de textura)", "final", 100.0, "% dos cortes", 5.0,
+              test=lambda row: row["final_status"] == "aprovada"),
+    Indicator("abs_delta_mu", "Filtro de brilho: Δμ", "diferença da média de todos os pixels do pulmão", "brilho", 0.0, "|sintética − original|", .05,
+              image="delta_mu"),
+    Indicator("brilho", "Filtro de brilho + densidade", "cortes com brilho fora do aceitável (Δμ, saturação ou pixels fora da faixa real)", "brilho", 0.0, "% dos cortes", 5.0,
+              test=lambda row: row["brightness_status"] != "approved" or row["density_status"] != "ok", image="densidade"),
+    Indicator("abs_delta_ll", "Wavelet LL (média local, 4×4 px)", "diferença do brilho médio vista pela wavelet, em fração da régua", "brilho", 0.0, "|sintética − original|", .05,
+              image="ll"),
+    Indicator("map_area_brilho_local_pct", "Mapa: brilho por bloco (16 px)", "área do pulmão em que o bloco clareou ou escureceu além da tolerância", "brilho", 0.0, "% do pulmão", 5.0),
+    Indicator("wavelet_fine_pct", "Wavelet 2 px (textura fina)", "detalhe entre pixels a ~2 px: bordas finas, ruído, pequenos vasos", "textura", 100.0, "% da original", 5.0,
+              image="wavelet_fina"),
+    Indicator("wavelet_coarse_pct", "Wavelet 4 px (textura grossa)", "detalhe em estruturas de ~4 px: vasos médios, septos", "textura", 100.0, "% da original", 5.0,
+              image="wavelet_grossa"),
+    Indicator("wavelet_ratio", "Wavelet 2 px ÷ 4 px (tipo de perda)", "abaixo de 1: perdeu mais o fino (borrou); acima de 1: sobrou fino demais (ruído)", "textura", 1.0, "razão", .05,
+              image="wavelet_fina"),
+    Indicator("glcm_contrast_pct", "GLCM contraste (vizinhos a 1 px)", "quanto o tom muda de um pixel para o vizinho", "textura", 100.0, "% da original", 5.0,
+              image="glcm_contraste"),
+    Indicator("glcm_energy_pct", "GLCM energia (uniformidade)", "quanto os pares de tons vizinhos se repetem; sobe quando a imagem fica lisa", "textura", 100.0, "% da original", 5.0),
+    Indicator("textura", "Veredito Wavelet", "cortes com textura alterada (borrou, ruído, perdeu ou ganhou contraste, estourou)", "textura", 0.0, "% dos cortes", 5.0,
+              test=lambda row: row["wavelet_verdict"] != "textura preservada"),
+    Indicator("map_area_textura_alterada_pct", "Mapa: textura por bloco (16 px)", "área do pulmão em que o bloco tem textura alterada", "textura", 0.0, "% do pulmão", 5.0),
+    Indicator("map_corr_textura", "Mapa: correlação espacial", "a textura está nos mesmos lugares da original? (1 = sim)", "textura", 1.0, "correlação", .05),
 )
-DECIMALS = {"wavelet_ratio": 2, "map_corr_textura": 2, "abs_delta_mu": 3}
+DECIMALS = {"wavelet_ratio": 2, "map_corr_textura": 2, "abs_delta_mu": 3, "abs_delta_ll": 3}
 FILTER_TEXT = {"approved": "filtro: aprovado", "manual_review": "filtro: revisão", "hard_reject": "filtro: rejeição"}
 DENSITY_TEXT = {"ok": "densidade: ok", "brighter": "densidade: clareou", "darker": "densidade: escureceu", "too_bright": "densidade: claro demais", "too_dark": "densidade: escuro demais"}
 
@@ -112,7 +123,12 @@ def rows_path(folder: Path, name: str) -> Path:
 
 def load_rows(folder: Path, name: str) -> list[dict]:
     with rows_path(folder, name).open(encoding="utf-8") as handle:
-        return list(csv.DictReader(handle))
+        rows = list(csv.DictReader(handle))
+    # colunas derivadas, calculadas na leitura para valer também em históricos já gravados
+    for row in rows:
+        row["abs_delta_ll"] = abs(float(row["wavelet_ll_synthetic"]) - float(row["wavelet_ll_real"]))
+        row["glcm_energy_pct"] = 100 * float(row["glcm_energy_synthetic"]) / float(row["glcm_energy_real"])
+    return rows
 
 
 def case_paths(folder: Path, mask_dir: Path | None) -> list[CasePaths]:
@@ -302,10 +318,6 @@ def build_board(history_dir: Path) -> dict | None:
     }
 
 
-# brilho em preto e branco (escureceu = preto, clareou = branco), para não se confundir com as cores da textura
-BRIGHT_STYLE = {"mais escuro": dict(facecolor="black", edgecolor="black"), "mais claro": dict(facecolor="white", edgecolor="black")}
-
-
 def load_case(entry: dict, case_id: str) -> ValidCase:
     paths = next((p for p in case_paths(Path(entry["folder"]), Path(entry["mask_dir"]) if entry["mask_dir"] else None) if p.case_id == case_id), None)
     if paths is None:
@@ -314,63 +326,6 @@ def load_case(entry: dict, case_id: str) -> ValidCase:
     if not isinstance(case, ValidCase):
         raise PlacarError(f"{case_id} em {entry['name']}: {case.reason}")
     return case
-
-
-def case_figure(history_dir: Path, case_id: str):
-    """Um corte em todas as versões do histórico, lado a lado.
-
-    Colunas: a original e cada versão. Linhas: a imagem; o brilho por bloco (só
-    os blocos que clarearam ou escureceram além da tolerância); o veredito de
-    textura por bloco. Cada linha tem a própria legenda. Versões no modo só
-    máscara mostram a imagem, mas não o mapa.
-    """
-    history = load_history(history_dir)
-    ctx = context_from_dict(history["calibration"])
-    versions = history["versions"]
-    cases = [load_case(entry, case_id) for entry in versions]
-    reference = cases[0]
-    rows_, cols_ = np.where(reference.lung_mask)
-    crop = (cols_.min() - 6, cols_.max() + 6, rows_.max() + 6, rows_.min() - 6)
-    window = dict(cmap="gray", vmin=ctx.interval["p1"], vmax=ctx.interval["p99"])
-
-    fig, axes = plt.subplots(3, len(versions) + 1, figsize=(3.4 * (len(versions) + 1), 9.6), squeeze=False)
-    for axis in axes.ravel():
-        axis.axis("off")
-    axes[0, 0].imshow(reference.original, **window)
-    axes[0, 0].set_title("Original", fontsize=9)
-    axes[1, 0].legend(handles=[Patch(label=name, linewidth=.8, **style) for name, style in BRIGHT_STYLE.items()] + [Patch(facecolor="none", edgecolor="black", linestyle=":", label="área avaliada")],
-                      title="Brilho por bloco (16 px)", loc="center", fontsize=8, title_fontsize=9, frameon=False)
-    axes[2, 0].legend(handles=[Patch(color=color, label=name) for name, color in zip(VERDICTS, VERDICT_COLORS)],
-                      title="Textura por bloco (16 px)", loc="center", fontsize=8, title_fontsize=9, frameon=False)
-    for column, (entry, case) in enumerate(zip(versions, cases), start=1):
-        axes[0, column].imshow(case.synthetic, **window)
-        axes[0, column].set_title(entry["name"], fontsize=9)
-        if entry.get("mode") == MASK_ONLY:
-            for row in (1, 2):
-                axes[row, column].text(.5, .5, "só máscara:\noutro pulmão no mesmo\ncontorno, mapa não se aplica", ha="center", va="center", fontsize=8, transform=axes[row, column].transAxes)
-            continue
-        readings, lung, stats = regional(case.original, case.synthetic, case.lung_mask, ctx)
-        extent = (0, lung.shape[1] * 16, lung.shape[0] * 16, 0)
-        evaluated = np.kron(lung, np.ones((16, 16)))
-        shift = ctx.maps["bright_shift"]
-        texture = np.where(lung, readings["verdict"], np.nan).astype(float)
-        for row in (1, 2):
-            axes[row, column].imshow(case.synthetic, **window, alpha=.45)
-            axes[row, column].contour(evaluated, levels=[.5], colors="black", linewidths=.6, linestyles=":")
-        for (y, x) in zip(*np.where(lung)):
-            name = "mais claro" if readings["ll"][y, x] > shift else "mais escuro" if readings["ll"][y, x] < -shift else None
-            if name:
-                axes[1, column].add_patch(Rectangle((x * 16, y * 16), 16, 16, linewidth=.8, **BRIGHT_STYLE[name]))
-        axes[1, column].set_title(f"{stats['area_mais_claro']:.0%} mais claro · {stats['area_mais_escuro']:.0%} mais escuro", fontsize=8)
-        axes[2, column].imshow(texture, cmap=ListedColormap(VERDICT_COLORS), vmin=-.5, vmax=len(VERDICTS) - .5, extent=extent, alpha=.85, interpolation="nearest")
-        axes[2, column].set_title(f"{1 - stats['area_textura preservada']:.0%} alterada · correlação {stats['correlacao_textura']:.2f}", fontsize=8)
-    for axis in axes.ravel():
-        if axis.images:
-            axis.contour(reference.lung_mask, levels=[.5], colors="#00a36c", linewidths=.5)
-            axis.set_xlim(crop[0], crop[1])
-            axis.set_ylim(crop[2], crop[3])
-    fig.tight_layout()
-    return fig
 
 
 # ---------------------------------------------------------------- saída
@@ -392,28 +347,22 @@ def group_indicators(group: str) -> list[Indicator]:
     return [indicator for indicator in INDICATORS if indicator.group == group]
 
 
-def score_table(board: dict, group: str) -> list[list[str]]:
-    """Linhas [indicador, ideal, versão 1, versão 2, ...] com mediana e intervalo."""
-    table = []
+def technique_table(board: dict, group: str) -> tuple[list[str], list[list[str]]]:
+    """Uma linha por técnica: o que mede, unidade, ideal, score de cada versão e mudança entre versões."""
+    pairs = [f"{a} → {b}" for a, b in board["comparisons"]]
+    header = ["Técnica", "O que mede", "Unidade", "Ideal", *board["names"], *pairs]
+    rows = []
     for indicator in group_indicators(group):
-        cells = []
+        cells = [indicator.label, indicator.meaning, indicator.unit, fmt(indicator.ideal, indicator)]
         for name in board["names"]:
             value, low, high = board["scores"][name][indicator.key]
             cells.append(f"{fmt(value, indicator)} [{fmt(low, indicator)}, {fmt(high, indicator)}]" if np.isfinite(value) else "n/a")
-        table.append([f"{indicator.label} ({indicator.unit})", fmt(indicator.ideal, indicator)] + cells)
-    return table
-
-
-def change_table(board: dict, group: str) -> list[list[str]]:
-    table = []
-    for indicator in group_indicators(group):
-        cells = []
         for pair in board["comparisons"]:
             gain, low, high = board["comparisons"][pair][indicator.key]
             label = change_label(gain, low, high, indicator)
             cells.append(label if label == "n/a" else f"{label} ({fmt_gain(gain, indicator)})")
-        table.append([indicator.label] + cells)
-    return table
+        rows.append(cells)
+    return header, rows
 
 
 def count_table(board: dict, group: str) -> list[list[str]]:
@@ -431,7 +380,7 @@ CHANGE_NOTE = (
     "Ganho = quanto, corte a corte, a versão nova chegou mais perto do ideal (mediana; em taxas, pontos percentuais). "
     "\"melhorou\" ou \"piorou\" só quando o intervalo de 95% não cruza o zero e a mudança passa do mínimo relevante "
     "(5 pp nas porcentagens e taxas; 0,05 na razão, na correlação e no |Δμ|); fora do zero mas abaixo do mínimo: \"mudança pequena\". "
-    "n/a: indicador do mapa em versão no modo só máscara."
+    "n/a: o mapa compara cada bloco com o mesmo bloco da original; numa versão só máscara (outro pulmão no mesmo contorno) esse par de blocos não existe."
 )
 
 
@@ -452,9 +401,7 @@ def write_markdown(board: dict, output: Path) -> None:
         "## Versões", "", *markdown_table(VERSION_HEADER, version_table(board)),
     ]
     for group, title in GROUPS.items():
-        lines += ["", f"## {title}", "", *markdown_table(["Indicador", "Ideal", *names], score_table(board, group))]
-        if pairs:
-            lines += ["", *markdown_table(["Mudança", *pairs], change_table(board, group))]
+        lines += ["", f"## {title}", "", *markdown_table(*technique_table(board, group))]
         lines += ["", *markdown_table(["Contagem de cortes", *names], count_table(board, group))]
     if pairs:
         lines += ["", CHANGE_NOTE]
@@ -479,7 +426,7 @@ def figure(board: dict, group: str | None = None):
         axis.errorbar(x, data[:, 0], yerr=[data[:, 0] - data[:, 1], data[:, 2] - data[:, 0]], fmt="o-", color="black", capsize=3, linewidth=1, markersize=4)
         axis.axhline(indicator.ideal, color="black", linestyle=":", linewidth=.8)
         axis.set_xticks(x, names, fontsize=8, rotation=30 if len(names) > 3 else 0)
-        axis.set_title(f"{indicator.label}\n{indicator.unit}" if group else f"{GROUPS[indicator.group]} · {indicator.label}\n{indicator.unit}", fontsize=8)
+        axis.set_title(f"{indicator.label}\n{indicator.unit}", fontsize=8)
         axis.tick_params(labelsize=8)
         axis.set_xlim(-.4, len(names) - .6)
     fig.tight_layout()
