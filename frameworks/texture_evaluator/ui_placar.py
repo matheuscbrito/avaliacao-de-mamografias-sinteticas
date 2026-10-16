@@ -18,7 +18,7 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 
-from frameworks.texture_evaluator.placar import PlacarError, add_version, build_board, load_case, load_history, remove_version, technique_table, write_outputs
+from frameworks.texture_evaluator.placar import PlacarError, add_version, build_board, load_case, load_history, refresh_history, remove_version, technique_table, write_outputs
 from frameworks.texture_evaluator.glcm.src import quantize
 from frameworks.texture_evaluator.regional import MASK_ONLY, PAIR_MIN_CORRELATION
 from frameworks.texture_evaluator.run_mvp import context_from_dict
@@ -35,6 +35,8 @@ DATASETS = {
 OFFICIAL_REVIEW, OFFICIAL_REJECT, OFFICIAL_SATURATION = float("nan"), float("nan"), 15.0
 STATUS_TEXT = {"approved": "aprovada", "manual_review": "revisão manual", "hard_reject": "rejeição direta"}
 DENSITY_TEXT = {"ok": "normal", "brighter": "clareou", "darker": "escureceu", "too_bright": "claro demais", "too_dark": "escuro demais"}
+FINAL_TEXT = {"aprovada": "aprovada", "revisar": "revisão necessária", "rejeitar": "rejeição direta"}
+NEX_TEXT = {"ok": "dentro da faixa real", "alto": "acima da faixa real", "baixo": "abaixo da faixa real", "inconclusivo": "inconclusivo (poucas janelas)"}
 
 
 def resolve(text: str) -> Path:
@@ -101,6 +103,14 @@ def ll_shift(row: dict) -> float:
     return abs(number(row, "wavelet_ll_synthetic") - number(row, "wavelet_ll_real"))
 
 
+def final_status(row: dict) -> str:
+    return FINAL_TEXT[row["final_status"]]
+
+
+def nex_reading(row: dict) -> str:
+    return f"{NEX_TEXT[row['nex_status']]} (Δ {number(row, 'nex_delta'):+.3f})".replace(".", ",")
+
+
 def texture_explanation(row: dict) -> str:
     energy = 100 * number(row, "glcm_energy_synthetic") / number(row, "glcm_energy_real")
     text = f"GLCM contraste {number(row, 'glcm_contrast_pct'):.0f}%; energia GLCM {energy:.0f}%; Wavelet 2 px {number(row, 'wavelet_fine_pct'):.0f}%; Wavelet 4 px {number(row, 'wavelet_coarse_pct'):.0f}%"
@@ -164,6 +174,7 @@ def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling:
         ("glcm_energy_real", "glcm_energy_synthetic", "GLCM · energia", "energia"),
         ("wavelet_energy_real", "wavelet_energy_synthetic", "Wavelet · energia (2 + 4 px)", "energia"),
         ("wavelet_entropy_real", "wavelet_entropy_synthetic", "Wavelet · entropia", "entropia"),
+        ("nex_real", "nex_synthetic", "NEx · assinatura espectral", "NEx"),
     ]
     panels = []
     for real_key, synthetic_key, title, label in specs:
@@ -181,7 +192,7 @@ def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling:
         ceiling = glcm_ceiling if title == "GLCM · energia" else wavelet_ceiling if title.startswith("Wavelet · energia") else None
         upper = ceiling if ceiling is not None else automatic_upper
         # entropia normalizada fica toda perto de 0,94: a partir de zero os pontos viram um borrão
-        lower = .98 * min(data["real"].min(), data["sintética"].min()) if title == "Wavelet · entropia" else 0
+        lower = .98 * min(data["real"].min(), data["sintética"].min()) if title in {"Wavelet · entropia", "NEx · assinatura espectral"} else 0
         identity = alt.Chart(pd.DataFrame({"x": [lower, upper], "y": [lower, upper]})).mark_line(color="#8a5a22", strokeDash=[4, 4]).encode(x="x:Q", y="y:Q")
         points = alt.Chart(data).mark_circle(size=75, color="#0d6b61").encode(
             x=alt.X("real:Q", title=f"real · {label}", scale=alt.Scale(domain=[lower, upper])),
@@ -241,7 +252,7 @@ def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
     if mode == "brilho":
         data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão oficial": official_brightness_status(row), "por quê": brightness_explanation(row), "densidade": density_reading(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"), "Wavelet LL |Δ|": ll_shift(row)} for row in rows]
     else:
-        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "leitura exploratória": row.get("wavelet_verdict", "n/a"), "o que mudou": texture_explanation(row), "GLCM contraste (%)": number(row, "glcm_contrast_pct"), "GLCM energia (%)": 100 * number(row, "glcm_energy_synthetic") / number(row, "glcm_energy_real"), "Wavelet 2 px (%)": number(row, "wavelet_fine_pct"), "Wavelet 4 px (%)": number(row, "wavelet_coarse_pct"), "Wavelet entropia Δ": number(row, "wavelet_entropy_synthetic") - number(row, "wavelet_entropy_real")} for row in rows]
+        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão do framework": final_status(row), "motivos": row["final_reasons"], "Wavelet": row.get("wavelet_verdict", "n/a"), "NEx": nex_reading(row), "GLCM contraste (%)": number(row, "glcm_contrast_pct"), "Wavelet 2 px (%)": number(row, "wavelet_fine_pct"), "Wavelet 4 px (%)": number(row, "wavelet_coarse_pct"), "NEx sintética": number(row, "nex_synthetic")} for row in rows]
     frame = pd.DataFrame(data)
     for column in frame.columns:
         if pd.api.types.is_numeric_dtype(frame[column]):
@@ -276,7 +287,7 @@ def show_method_cards(mode: str):
             ["Wavelet · energia (2 + 4 px)", "quantidade total de detalhe, somando a escala fina (~2 px) e a grossa (~4 px); na tabela, as duas escalas aparecem separadas"],
             ["Wavelet · entropia", "variação/complexidade da distribuição de detalhes"],
         ], columns=["técnica", "o que ela mede"]), hide_index=True, width="stretch")
-        st.warning("Vereditos como “borrou” são exploratórios: ajudam a descrever e priorizar inspeção, mas não são o gatekeeper oficial de brilho nem uma decisão clínica.")
+        st.write("**A decisão final usa as três evidências.** GLCM e Wavelet conferem a quantidade e o tipo de detalhe; NEx procura uma assinatura espectral fora da faixa dos pulmões reais. Qualquer sinal de textura ou NEx fora da faixa leva a **revisão necessária**. Só o brilho pode causar rejeição direta.")
 
 
 def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, version: str, mode: str):
@@ -288,7 +299,8 @@ def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, versio
         st.markdown(f"**Densidade:** {density_reading(row)} · **Wavelet LL:** |Δ| {br(ll_shift(row))} (fração da régua)")
         choices = {"CT real × sintética (Δμ)": "delta_mu", "Densidade · pixels fora da faixa real": "densidade", "Brilho local (Wavelet LL)": "ll"}
     else:
-        st.markdown(f"**Leitura de textura: {row.get('wavelet_verdict', 'n/a')}.** {texture_explanation(row)}")
+        st.markdown(f"**Decisão do framework: {final_status(row)}.** {row['final_reasons']}")
+        st.markdown(f"**Wavelet:** {row.get('wavelet_verdict', 'n/a')} · **NEx:** {nex_reading(row)}")
         choices = {"GLCM · contraste": "glcm_contraste", "Wavelet · detalhe fino": "wavelet_fina", "Wavelet · detalhe grosso": "wavelet_grossa"}
     st.image(raw_pair_png(str(history_dir), stamp, case_id, version), use_container_width=True)
     st.caption("CTs brutas lado a lado — sem mapa, máscara ou métrica sobreposta. A mesma janela de visualização é usada nas duas imagens para permitir comparação direta.")
@@ -349,6 +361,14 @@ if history is None:
             st.error(str(error))
     st.stop()
 
+if "nex_reference" not in history["calibration"]:
+    st.warning("Este histórico foi calculado antes da integração do NEx. Recalcule as versões para aplicar a faixa real da ROI aos resultados.")
+    if st.button("Recalcular versões com NEx", type="primary"):
+        with st.spinner("Recalculando GLCM, Wavelet e NEx..."):
+            st.success(refresh_history(history_dir))
+        st.rerun()
+    st.stop()
+
 try:
     board = build_board(history_dir)
 except PlacarError as error:
@@ -395,18 +415,25 @@ if mode == "brilho":
     second.metric("Densidade: pixels fora da faixa real", int(density.get("too_bright", 0) + density.get("too_dark", 0)), f"claro ou escuro demais · de {len(rows)} cortes")
     third.metric("Wavelet LL: |Δ| mediano", br(float(np.median([ll_shift(row) for row in rows]))), "brilho em baixa frequência")
 else:
-    below_identity = sum(number(row, "glcm_contrast_pct") < 100 for row in rows)
-    median_contrast = np.median([number(row, "glcm_contrast_pct") for row in rows])
+    statuses = pd.Series([final_status(row) for row in rows]).value_counts()
+    nex_flags = sum(row["nex_status"] in {"alto", "baixo"} for row in rows)
+    wavelet_flags = sum(row.get("wavelet_verdict") != "textura preservada" for row in rows)
+    disagreements = sum(row["texture_agreement"] == "discordam" for row in rows)
     first, second, third = st.columns(3)
-    first.metric("Contraste GLCM abaixo da identidade", f"{below_identity}/{len(rows)}", "sintética < real")
-    second.metric("Contraste GLCM mediano", f"{median_contrast:.0f}%", "sintética / real")
-    third.metric("Cortes marcados “borrou”", sum(row.get("wavelet_verdict") == "borrou" for row in rows), "leitura exploratória")
+    first.metric("Aprovadas pelo framework", int(statuses.get("aprovada", 0)), f"de {len(rows)} cortes")
+    second.metric("Revisão necessária", int(statuses.get("revisão necessária", 0)), "brilho, textura ou NEx")
+    third.metric("Rejeições diretas", int(statuses.get("rejeição direta", 0)), "somente brilho")
+    st.markdown("#### Sinais que levaram à revisão")
+    first, second, third = st.columns(3)
+    first.metric("Wavelet: textura alterada", wavelet_flags, "tipo e quantidade de detalhe")
+    second.metric("NEx fora da faixa real", nex_flags, "assinatura espectral na ROI")
+    third.metric("GLCM × Wavelet discordam", disagreements, "precisa de inspeção")
 
 if mode == "textura":
     st.markdown("#### Relação entre CT real e sintética")
     scale_glcm, scale_wavelet = st.columns(2)
-    glcm_choice = scale_glcm.segmented_control("Escala · energia GLCM", ["Automática", "Até 0,10", "Até 0,20"], default="Automática", help="Use a mesma régua ao alternar Dsr e Dgen.")
-    wavelet_choice = scale_wavelet.segmented_control("Escala · energia Wavelet", ["Automática", "Até 0,01", "Até 0,02", "Até 0,05"], default="Automática", help="Wavelet usa valores muito menores do que energia GLCM; esta escolha não altera o gráfico GLCM.")
+    glcm_choice = scale_glcm.segmented_control("Escala · energia GLCM", ["Automática", "Até 0,10", "Até 0,20"], default="Automática", help="Use a mesma régua ao alternar Dsr e Dgen.") or "Automática"
+    wavelet_choice = scale_wavelet.segmented_control("Escala · energia Wavelet", ["Automática", "Até 0,01", "Até 0,02", "Até 0,05"], default="Automática", help="Wavelet usa valores muito menores do que energia GLCM; esta escolha não altera o gráfico GLCM.") or "Automática"
     glcm_ceiling = {"Automática": None, "Até 0,10": .10, "Até 0,20": .20}[glcm_choice]
     wavelet_ceiling = {"Automática": None, "Até 0,01": .01, "Até 0,02": .02, "Até 0,05": .05}[wavelet_choice]
     st.caption("Passe o mouse num ponto para ver o corte. A linha tracejada é a identidade: real = sintética. Para abrir um corte, clique na linha dele na tabela abaixo.")
@@ -425,7 +452,7 @@ else:
 with st.expander("Ver todos os cortes e o motivo", expanded=True):
     table = metrics_table(rows, mode)
     # reset_index: a linha clicada volta como posição, e ela precisa bater com a ordem mostrada
-    table = table.sort_values(["decisão oficial", "|Δμ|"] if mode == "brilho" else "GLCM contraste (%)", ascending=[True, False] if mode == "brilho" else True).reset_index(drop=True)
+    table = table.sort_values(["decisão oficial", "|Δμ|"] if mode == "brilho" else ["decisão do framework", "NEx sintética"], ascending=[True, False] if mode == "brilho" else [True, False]).reset_index(drop=True)
     table.insert(0, "em foco", np.where(table["case_id"] == case_id, "●", ""))
     st.caption("Clique numa linha para abrir o corte abaixo.")
     event = st.dataframe(table, hide_index=True, width="stretch", height=320, column_order=[column for column in table.columns if column != "case_id"],
@@ -443,7 +470,7 @@ with st.expander("Ver todos os cortes e o motivo", expanded=True):
     if mode == "brilho":
         st.caption("“Decisão oficial” usa somente |Δμ| e Sat31. Wavelet LL aparece para contexto, mas não altera a categoria.")
     else:
-        st.caption("“Leitura exploratória” descreve a alteração de textura observada; não é aprovação/rejeição clínica. Os valores percentuais comparam sintética ÷ real no mesmo corte.")
+        st.caption("A decisão do framework combina GLCM, Wavelet e NEx. A rejeição direta é reservada a brilho; sinais de textura ou NEx fora da faixa real pedem revisão.")
     st.caption("Os pontos e linhas resumem cortes do dataset; fases do mesmo paciente não devem ser interpretadas como pacientes independentes.")
 
 show_case(board, history_dir, stamp, case_id, version, mode)

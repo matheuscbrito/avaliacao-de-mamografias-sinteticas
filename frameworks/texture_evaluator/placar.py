@@ -82,6 +82,8 @@ INDICATORS = (
               test=lambda row: row["brightness_status"] != "approved" or row["density_status"] != "ok", image="densidade"),
     Indicator("abs_delta_ll", "Wavelet LL (média local, 4×4 px)", "diferença do brilho médio vista pela wavelet, em fração da régua", "brilho", 0.0, "|sintética − original|", .05,
               image="ll"),
+    Indicator("nex", "NEx na ROI pulmonar", "excesso de energia perto de Nyquist nas janelas internas do pulmão; fora de P5–P95 real pede revisão", "textura", 0.0, "% dos cortes", 5.0,
+              test=lambda row: row.get("nex_status") in {"alto", "baixo"}),
     Indicator("map_area_brilho_local_pct", "Mapa: brilho por bloco (16 px)", "área do pulmão em que o bloco clareou ou escureceu além da tolerância", "brilho", 0.0, "% do pulmão", 5.0),
     Indicator("wavelet_fine_pct", "Wavelet 2 px (textura fina)", "detalhe entre pixels a ~2 px: bordas finas, ruído, pequenos vasos", "textura", 100.0, "% da original", 5.0,
               image="wavelet_fina"),
@@ -205,6 +207,36 @@ def add_version(history_dir: Path, name: str, folder: Path, mask_dir: Path | Non
     return f"{name}: {len(rows)} cortes avaliados · modo {mode}" + (f" · {suspicious} pares suspeitos" if suspicious else "")
 
 
+def refresh_history(history_dir: Path) -> str:
+    """Recalcula versões já guardadas quando o protocolo ganha uma nova métrica.
+
+    A referência continua sendo a versão original do histórico; só as colunas
+    derivadas são refeitas com a calibração atual.
+    """
+    history = load_history(history_dir)
+    if not history or not history["versions"]:
+        raise PlacarError("não há versões para recalcular")
+    reference = next(version for version in history["versions"] if version["name"] == history["reference"])
+    reference_masks = Path(reference["mask_dir"]) if reference.get("mask_dir") else None
+    reference_valid = load_valid(Path(reference["folder"]), reference_masks)
+    if not reference_valid:
+        raise PlacarError("não foi possível recarregar a versão de referência")
+    ctx = calibrate(list(reference_valid.values()))
+    history["calibration"] = context_to_dict(ctx)
+    for version in history["versions"]:
+        masks = Path(version["mask_dir"]) if version.get("mask_dir") else None
+        valid = load_valid(Path(version["folder"]), masks)
+        cases = sorted(case for case in valid if case in history["originals"])
+        rows = [{**evaluate_pair(case, valid[case].original, valid[case].synthetic, valid[case].lung_mask, ctx), "abs_delta_mu": 0.0} for case in cases]
+        for row in rows:
+            row["abs_delta_mu"] = abs(row["delta_mu"])
+        mode = apply_pair_check(rows)
+        version.update({"n_cases": len(rows), "mode": mode, "suspicious_pairs": sum(row["pair_status"] == "suspeito" for row in rows)})
+        write_csv(rows_path(history_dir, version["name"]), rows)
+    save_history(history_dir, history)
+    return f"{len(history['versions'])} versão(ões) recalculada(s) com a calibração atual"
+
+
 def remove_version(history_dir: Path, name: str) -> None:
     history = load_history(history_dir)
     if not history or not any(version["name"] == name for version in history["versions"]):
@@ -286,6 +318,8 @@ def verdict_label(row: dict) -> str:
     if row["final_status"] == "rejeitar":
         return "rejeitar: brilho"
     if row["final_status"] == "revisar":
+        if row.get("nex_status") in {"alto", "baixo"}:
+            return f"revisar: NEx {row['nex_status']}"
         return "revisar: só brilho" if row["wavelet_verdict"] == "textura preservada" else f"revisar: {row['wavelet_verdict']}"
     return "aprovada"
 
@@ -293,7 +327,7 @@ def verdict_label(row: dict) -> str:
 COUNTS = {
     "final": lambda row: [verdict_label(row)],
     "brilho": lambda row: [FILTER_TEXT[row["brightness_status"]], DENSITY_TEXT[row["density_status"]]],
-    "textura": lambda row: [row["wavelet_verdict"]],
+    "textura": lambda row: [row["wavelet_verdict"], f"NEx: {row.get('nex_status', 'indisponível')}"] ,
 }
 
 

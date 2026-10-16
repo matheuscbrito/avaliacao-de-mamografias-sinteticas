@@ -12,6 +12,7 @@ from wavelet.src.densidade_wavelet import wavelet_verdict
 from wavelet.src.wavelet_diagnostico import raw_readings, relative
 from wavelet.src.wavelet_features_fullimage import wavelet_energy_entropy_fullimage
 from wavelet.src.wavelet_brightness import ll_mean
+from frameworks.texture_evaluator.nex_referencia import measure as nex_measure, summary as nex_summary
 from frameworks.texture_evaluator.glcm.src import RobustScale, calibrate_robust_scale, extract_glcm
 from frameworks.texture_evaluator.decision import decide
 from frameworks.texture_evaluator.regional import apply_pair_check, calibrate_maps, pair_correlation, regional, regional_columns
@@ -27,17 +28,20 @@ def calibrate(valid) -> SimpleNamespace:
     # a densidade continua na faixa P1–P99, que é a definição de "fora da faixa real"
     ruler = {'p1': scale.clip_low, 'p99': scale.clip_high}
     means = np.array([c.original[c.lung_mask].mean() for c in valid]); mean_iqr = float(np.diff(np.percentile(means, [25, 75]))[0])
+    # NEx é medido nas mesmas janelas inteiramente dentro da ROI pulmonar. A
+    # faixa P5–P95 nasce somente das originais e fica congelada no histórico.
+    nex_reference = nex_summary(np.array([nex_measure(c.original, c.lung_mask)["nex_roi"] for c in valid]))
     return SimpleNamespace(scale=scale, interval=interval, limits=limits, ruler=ruler, mean_iqr=mean_iqr, settings=SimpleNamespace(wavelet='haar', min_tissue=.9),
-                           maps=calibrate_maps(valid, ruler, interval, limits))
+                           maps=calibrate_maps(valid, ruler, interval, limits), nex_reference=nex_reference)
 
 def context_to_dict(ctx) -> dict:
     """Réguas e limites em JSON, para reaplicar a mesma calibração mais tarde."""
-    return {'glcm_scale': ctx.scale.as_dict(), 'density_interval': ctx.interval, 'density_limits': ctx.limits, 'mean_iqr': ctx.mean_iqr, 'maps': ctx.maps}
+    return {'glcm_scale': ctx.scale.as_dict(), 'density_interval': ctx.interval, 'density_limits': ctx.limits, 'mean_iqr': ctx.mean_iqr, 'maps': ctx.maps, 'nex_reference': ctx.nex_reference}
 
 def context_from_dict(data: dict) -> SimpleNamespace:
     scale = RobustScale(**data['glcm_scale'])
     return SimpleNamespace(scale=scale, interval=data['density_interval'], limits=data['density_limits'], ruler={'p1': scale.clip_low, 'p99': scale.clip_high},
-                           mean_iqr=data['mean_iqr'], settings=SimpleNamespace(wavelet='haar', min_tissue=.9), maps=data['maps'])
+                           mean_iqr=data['mean_iqr'], settings=SimpleNamespace(wavelet='haar', min_tissue=.9), maps=data['maps'], nex_reference=data.get('nex_reference'))
 
 def evaluate_pair(case_id, original, synthetic, mask, ctx) -> dict:
     """Mede brilho, GLCM e Wavelet de um par e devolve a linha com a decisão final na frente."""
@@ -47,6 +51,15 @@ def evaluate_pair(case_id, original, synthetic, mask, ctx) -> dict:
     syn_w=wavelet_energy_entropy_fullimage(synthetic,mask,ruler['p1'],ruler['p99'],'haar',2)
     delta=float(synthetic[mask].mean()-original[mask].mean()); sat=syn_g['saturation_tone_31_pct']
     dens_real, dens_syn = density_features(original,mask,interval), density_features(synthetic,mask,interval)
+    nex_real, nex_synthetic = nex_measure(original, mask), nex_measure(synthetic, mask)
+    if nex_real['poucas_janelas'] or nex_synthetic['poucas_janelas']:
+        nex_status = 'inconclusivo'
+    elif nex_synthetic['nex_roi'] > ctx.nex_reference['p95']:
+        nex_status = 'alto'
+    elif nex_synthetic['nex_roi'] < ctx.nex_reference['p5']:
+        nex_status = 'baixo'
+    else:
+        nex_status = 'ok'
     # veredito da Wavelet: energia fina/grossa da sintética em % da original (limites exploratórios)
     reading = relative(raw_readings(synthetic,mask,ruler,settings), raw_readings(original,mask,ruler,settings))
     status='hard_reject' if abs(delta)>2*ctx.mean_iqr or sat>15 else 'manual_review' if abs(delta)>ctx.mean_iqr else 'approved'
@@ -59,6 +72,9 @@ def evaluate_pair(case_id, original, synthetic, mask, ctx) -> dict:
          'wavelet_entropy_real':real_w['entropy'],'wavelet_entropy_synthetic':syn_w['entropy'],
          'wavelet_ll_real':ll_mean(original,mask,ruler['p1'],ruler['p99'],'haar',2,.9),
          'wavelet_ll_synthetic':ll_mean(synthetic,mask,ruler['p1'],ruler['p99'],'haar',2,.9),
+         'nex_real':nex_real['nex_roi'],'nex_synthetic':nex_synthetic['nex_roi'],
+         'nex_delta':nex_synthetic['nex_roi'] - nex_real['nex_roi'], 'nex_status':nex_status,
+         'nex_janelas_real':nex_real['janelas'],'nex_janelas_sintetica':nex_synthetic['janelas'],
          'pair_correlation':pair_correlation(original,synthetic,mask), **regional_columns(regional(original,synthetic,mask,ctx)[2])}
     # decisão final na frente da tabela: veredito, motivos e depois as medidas
     return {'case_id': case_id, **decide(row), **row}

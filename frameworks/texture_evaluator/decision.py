@@ -10,6 +10,9 @@ Três perguntas, nesta ordem:
    confere a outra: se discordarem, o corte vai para revisão.
 3. **Que tipo de defeito?** Veredito Wavelet (razão fino/grosso): borrou,
    ruído, perdeu contraste…
+4. **Há assinatura espectral anômala?** NEx medido na mesma ROI pulmonar;
+   fora de P5–P95 das originais manda para revisão. Poucas janelas =
+   inconclusivo, nunca reprova sozinho.
 
 Resultado: `aprovada`, `revisar` ou `rejeitar`, com os motivos em texto.
 Rejeição direta só vem do brilho; defeito de textura manda para revisão,
@@ -56,6 +59,16 @@ def decide(row: dict) -> dict:
     if not texture_ok:
         status = max(status, "revisar", key=FINAL_STATUSES.index)
         reasons.append(f"textura: {row['wavelet_verdict']} (fino {fine_pct:.0f}%, grosso {float(row['wavelet_coarse_pct']):.0f}%, contraste GLCM {glcm_pct:.0f}%)")
+
+    # NEx é independente das leituras GLCM/Wavelet de energia: ele procura
+    # excesso perto de Nyquist nas janelas internas da ROI. É um gatilho de
+    # revisão, não de rejeição direta, enquanto a validação clínica é limitada.
+    nex_status = row.get("nex_status", "inconclusivo")
+    if nex_status in {"alto", "baixo"}:
+        status = max(status, "revisar", key=FINAL_STATUSES.index)
+        reasons.append(f"NEx: {nex_status} fora da faixa real (Δ {float(row['nex_delta']):+.3f})")
+    elif nex_status == "inconclusivo":
+        reasons.append("NEx: inconclusivo (poucas janelas na ROI)")
 
     if status == "rejeitar":
         # com o brilho fora do aceitável, a textura é registrada mas não é o motivo da decisão
