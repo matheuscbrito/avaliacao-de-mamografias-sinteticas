@@ -45,7 +45,7 @@ Para acompanhar o modelo ao longo das iterações. Cada versão é a pasta de sa
 
 ```bash
 .venv/bin/python -m frameworks.texture_evaluator.placar \
-  --version v1=saidas/v1 --version v2=saidas/v2 \
+  --version v1=CAMINHO/DA/VERSAO1 --version v2=CAMINHO/DA/VERSAO2 \
   --mask-dir dados/Dgen --output-dir outputs/placar
 ```
 

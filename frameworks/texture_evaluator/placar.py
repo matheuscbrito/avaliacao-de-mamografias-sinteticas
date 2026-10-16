@@ -15,7 +15,7 @@ partir das **mesmas originais** (mesmos nomes de arquivo). O placar:
 
 Uso:
     python -m frameworks.texture_evaluator.placar \\
-        --version v1=pasta_v1 --version v2=pasta_v2 \\
+        --version v1=CAMINHO/DA/VERSAO1 --version v2=CAMINHO/DA/VERSAO2 \\
         --mask-dir dados/Dgen --output-dir outputs/placar
 """
 from __future__ import annotations
@@ -193,6 +193,11 @@ def main() -> None:
     names = [name for name, _ in a.version]
     if len(set(names)) != len(names):
         raise SystemExit("nomes de versão repetidos")
+    missing = [f"  {name}={folder}" for name, folder in a.version if not folder.is_dir()]
+    if missing:
+        raise SystemExit("pasta de versão não encontrada:\n" + "\n".join(missing) + "\ncada --version deve apontar para uma pasta existente com as originais e as sintéticas (_generate)")
+    if a.mask_dir and not a.mask_dir.is_dir():
+        raise SystemExit(f"pasta de máscaras não encontrada: {a.mask_dir}")
 
     valid = {name: load_valid(folder, a.mask_dir) for name, folder in a.version}
     common = sorted(set.intersection(*(set(cases) for cases in valid.values())))
