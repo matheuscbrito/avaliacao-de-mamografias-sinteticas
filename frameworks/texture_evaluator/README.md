@@ -32,7 +32,15 @@ Cada corte sai com `final_status` (`aprovada`, `revisar` ou `rejeitar`) e os mot
 2. **Quantidade de detalhe:** contraste GLCM e energia fina Wavelet devem concordar (80–125% da original); se discordarem, o corte vai para revisão.
 3. **Tipo de defeito:** veredito Wavelet diferente de "textura preservada" manda para revisão.
 
-**Classificação por métrica Wavelet (aba de textura do painel).** Cada métrica Wavelet (2 px, 4 px e entropia) é classificada com a mesma regra do filtro de brilho: a diferença sintética − original, medida em IQR daquela métrica entre as CTs reais de referência (`wavelet_iqr` na calibração). Até 1 IQR é **aprovada**, entre 1 e 2 é **revisão**, acima de 2 é **reprovada** (colunas `wavelet_*_z`, `wavelet_*_status` e `wavelet_status`, a pior das três). Essa reprovação vale só na leitura de textura; o veredito final acima continua mandando textura para revisão. No Dsr: 2 px 18 aprovadas, 19 revisão, 0 reprovadas; no Dgen, 16, 14 e 7. A regra é branda porque a quantidade de textura varia muito entre cortes reais (o IQR do 2 px é ~47% da mediana).
+**Veredito de textura (aba de textura do painel).** GLCM, Wavelet e NEx são classificadas cada uma por conta própria, e o veredito de textura é a **pior das três** (`decision.texture_status`). O brilho não entra.
+
+| Técnica | Métricas | Regra |
+|---|---|---|
+| GLCM | contraste, energia | diferença sintética − original em IQR da métrica entre as CTs reais (`glcm_iqr`): até 1 **aprovada**, 1–2 **revisão**, acima de 2 **reprovada**; a pior métrica decide |
+| Wavelet | 2 px, 4 px, entropia | a mesma regra (`wavelet_iqr`); o "tipo" (borrou, ruído…) descreve, não decide |
+| NEx | NEx na ROI | fora de P5–P95 das CTs reais = **revisão**; poucas janelas = inconclusivo, não pesa |
+
+Colunas: `glcm_*_z`, `glcm_*_status`, `glcm_status`, `wavelet_*_z`, `wavelet_*_status`, `wavelet_status` e `nex_status`. O painel mostra uma matriz "quem disse o quê" (corte × técnica) e uma aba por técnica com os gráficos de cada métrica. A reprovação vale só na leitura de textura; o veredito final acima continua mandando textura para revisão. No Dsr: 8 preservadas, 29 revisão, 0 reprovadas; no Dgen: 2, 26 e 9. A regra é branda porque a textura varia muito entre cortes reais (o IQR do 2 px é ~47% da mediana).
 
 A validação com defeitos conhecidos está em [`resultados/teste_decisao/resumo.md`](../../resultados/teste_decisao/resumo.md):
 
