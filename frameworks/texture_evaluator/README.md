@@ -41,14 +41,23 @@ A validação com defeitos conhecidos está em [`resultados/teste_decisao/resumo
 
 ## Placar por versão do gerador
 
-Para acompanhar o modelo ao longo das iterações. Cada versão é a pasta de saída de uma iteração, gerada das **mesmas originais**; passe em ordem cronológica:
+Para acompanhar o modelo ao longo das iterações. Cada versão é a pasta de saída de uma iteração, gerada das **mesmas originais**. O placar guarda um histórico: cada versão é avaliada uma vez e as novas entram depois, sem recalcular as antigas. A primeira versão vira a referência das réguas.
+
+**Interface** (adicionar versões, scores, mudanças, vereditos e tabela por corte):
 
 ```bash
-.venv/bin/python -m frameworks.texture_evaluator.placar \
-  --version v1=CAMINHO/DA/VERSAO1 --version v2=CAMINHO/DA/VERSAO2 \
-  --mask-dir dados/Dgen --output-dir outputs/placar
+.venv/bin/streamlit run frameworks/texture_evaluator/ui_placar.py --theme.base light --theme.font monospace
 ```
 
-O resultado principal é `placar.md`: mediana de cada indicador com intervalo de 95%, vereditos por versão e, para cada versão, se ela melhorou, piorou ou não mudou em relação à anterior. As réguas ficam fixas nas originais da primeira versão. Exemplo e validação em [`resultados/placar_versoes/resumo.md`](../../resultados/placar_versoes/resumo.md).
+**Linha de comando** (mesmo histórico):
+
+```bash
+.venv/bin/python -m frameworks.texture_evaluator.placar --output-dir outputs/placar \
+  --version v1=CAMINHO/DA/VERSAO1 --mask-dir dados/Dgen
+.venv/bin/python -m frameworks.texture_evaluator.placar --output-dir outputs/placar \
+  --version v2=CAMINHO/DA/VERSAO2
+```
+
+`--remove NOME` tira uma versão. O resultado fica em `placar.md` (mediana de cada indicador com intervalo de 95%, vereditos e se cada versão melhorou, piorou ou não mudou em relação à anterior), `placar.csv`, `comparacao.csv` e `por_caso.csv`. Exemplo e validação em [`resultados/placar_versoes/resumo.md`](../../resultados/placar_versoes/resumo.md).
 
 Depois da execução, abra `outputs/mvp/report/index.html` no navegador. Ele explica cada número, mostra os gráficos pareados real × sintética e traz uma ficha visual para cada corte analisado.

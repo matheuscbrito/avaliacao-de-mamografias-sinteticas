@@ -8,11 +8,13 @@
 
 O time que gera as imagens roda o placar a cada iteração do modelo e vê se a textura está chegando mais perto da real. Uma **versão** é a pasta de saída de uma iteração (por exemplo, "v1 época 50", "v2 loss nova"), gerada a partir das **mesmas originais**.
 
+O placar guarda um **histórico** (`historico.json` e `versoes/*.csv`): cada versão é avaliada uma vez, e versões novas entram depois sem recalcular as antigas, pela linha de comando ou pela interface (`ui_placar.py`).
+
 Garantias:
 - **Régua fixa:** as réguas são calibradas uma vez, nas originais da primeira versão, e valem para todas. O script recusa versões cujas originais sejam diferentes.
 - **Mesmos cortes:** só entram os cortes válidos em todas as versões.
 - **Margem de erro:** cada número vem com um intervalo de 95% (bootstrap nos cortes).
-- **Comparação justa:** cada versão é comparada com a anterior **corte a corte**. Só aparece "melhorou" ou "piorou" quando o intervalo não cruza o zero **e** a mudança passa de um mínimo relevante (5 pp, ou 0,05 na razão e no Δμ). Os mínimos são exploratórios.
+- **Comparação justa:** cada versão é comparada com a anterior **corte a corte**. Só aparece "melhorou" ou "piorou" quando o intervalo não cruza o zero **e** a mudança passa de um mínimo relevante (5 pp, ou 0,05 na razão e no |Δμ|). Os mínimos são exploratórios.
 
 ## Validação
 
@@ -21,7 +23,7 @@ As versões abaixo foram simuladas a partir do Dsr:
 | Versão simulada | Resultado esperado | Resultado |
 |---|---|---|
 | cópia idêntica | nada muda | "sem diferença clara" em todos os indicadores |
-| borrada (σ=1) | textura piora | "piorou" em detalhe fino, detalhe grosso, razão, contraste GLCM e aprovadas; Δμ só "mudança pequena" |
+| borrada (σ=1) | textura piora | "piorou" em detalhe fino, detalhe grosso, razão, contraste GLCM e aprovadas; |Δμ| só "mudança pequena" |
 
 ## Demonstração com as duas versões reais (Dgen → Dsr)
 
@@ -33,6 +35,7 @@ São as duas gerações que temos das mesmas 100 originais (37 cortes válidos).
 | Detalhe grosso | 100% | 60% | 66% | **melhorou** |
 | Razão fino/grosso | 1,00 | 0,98 | 0,83 | **piorou** |
 | Contraste GLCM | 100% | 61% | 60% | sem diferença clara |
+| \|Δμ\| (desvio de brilho) | 0 | 0,310 | 0,143 | **melhorou** |
 | Aprovadas | 100% | 3% | 14% | **melhorou** |
 | Brilho sinalizado | 0% | 46% | 8% | **melhorou** |
 

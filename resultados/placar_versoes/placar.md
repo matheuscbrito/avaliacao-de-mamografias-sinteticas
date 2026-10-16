@@ -11,9 +11,9 @@ Valor = mediana entre os cortes; entre colchetes, intervalo de 95% (bootstrap).
 | Detalhe grosso (Wavelet) (% da original) | 100% | 60% [44%, 69%] | 66% [60%, 70%] |
 | Razão fino/grosso (1 = sem borrar nem ruído) | 1.00 | 0.98 [0.91, 1.04] | 0.83 [0.82, 0.86] |
 | Contraste GLCM (% da original) | 100% | 61% [50%, 89%] | 60% [54%, 65%] |
-| Δμ (brilho) (sintética − original) | +0.000 | -0.093 [-0.211, +0.170] | -0.143 [-0.215, -0.046] |
-| Aprovadas (% dos cortes) | 100% | 3% [0, 8] | 14% [3, 24] |
-| Brilho sinalizado (% dos cortes) | 0% | 46% [30, 62] | 8% [0, 19] |
+| \|Δμ\| (desvio de brilho) (\|sintética − original\|) | 0.000 | 0.310 [0.211, 0.432] | 0.143 [0.065, 0.215] |
+| Aprovadas (% dos cortes) | 100% | 3% [0%, 8%] | 14% [3%, 24%] |
+| Brilho sinalizado (% dos cortes) | 0% | 46% [30%, 62%] | 8% [0%, 19%] |
 
 ## Vereditos
 
@@ -24,22 +24,29 @@ Valor = mediana entre os cortes; entre colchetes, intervalo de 95% (bootstrap).
 | aprovada | 1 | 5 |
 | rejeitar: brilho | 5 | 0 |
 | revisar: estourou | 3 | 0 |
-| revisar: ruído | 2 | 0 |
 | revisar: ganhou contraste | 2 | 0 |
 | revisar: só brilho | 2 | 0 |
+| revisar: ruído | 2 | 0 |
 
 ## Comparação com a versão anterior
 
 Ganho = quanto, corte a corte, a versão nova chegou mais perto do ideal (mediana; em taxas, pontos percentuais).
 Só é "melhorou" ou "piorou" quando o intervalo de 95% não cruza o zero **e** a mudança passa do mínimo relevante
-(5 pp nas porcentagens e taxas, 0,05 na razão e no Δμ); se só a primeira condição vale, aparece "mudança pequena".
+(5 pp nas porcentagens e taxas, 0,05 na razão e no |Δμ|); se só a primeira condição vale, aparece "mudança pequena".
 
 | Indicador | Dgen → Dsr |
 |---|---|
-| Detalhe fino (Wavelet) | **sem diferença clara** (+5.1 pp) |
-| Detalhe grosso (Wavelet) | **melhorou** (+11.3 pp) |
-| Razão fino/grosso | **piorou** (-0.09) |
-| Contraste GLCM | **sem diferença clara** (+4.2 pp) |
-| Δμ (brilho) | **melhorou** (+0.09) |
-| Aprovadas | **melhorou** (+10.8 pp) |
-| Brilho sinalizado | **melhorou** (+37.8 pp) |
+| Detalhe fino (Wavelet) | sem diferença clara (+5.1 pp) |
+| Detalhe grosso (Wavelet) | melhorou (+11.3 pp) |
+| Razão fino/grosso | piorou (-0.09) |
+| Contraste GLCM | sem diferença clara (+4.2 pp) |
+| \|Δμ\| (desvio de brilho) | melhorou (+0.09) |
+| Aprovadas | melhorou (+10.8 pp) |
+| Brilho sinalizado | melhorou (+37.8 pp) |
+
+## Versões
+
+| Versão | Pasta | Adicionada em | Cortes válidos |
+|---|---|---|---|
+| Dgen | `dados/Dgen` | 2026-10-15T21:54:07 | 37 |
+| Dsr | `dados/Dsr` | 2026-10-15T21:54:09 | 37 |

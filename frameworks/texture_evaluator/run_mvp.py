@@ -12,7 +12,7 @@ from wavelet.src.densidade_wavelet import wavelet_verdict
 from wavelet.src.wavelet_diagnostico import raw_readings, relative
 from wavelet.src.wavelet_features_fullimage import wavelet_energy_entropy_fullimage
 from wavelet.src.wavelet_brightness import ll_mean
-from frameworks.texture_evaluator.glcm.src import calibrate_robust_scale, extract_glcm
+from frameworks.texture_evaluator.glcm.src import RobustScale, calibrate_robust_scale, extract_glcm
 from frameworks.texture_evaluator.decision import decide
 from frameworks.texture_evaluator.report import generate_report
 
@@ -27,6 +27,15 @@ def calibrate(valid) -> SimpleNamespace:
     ruler = {'p1': scale.clip_low, 'p99': scale.clip_high}
     means = np.array([c.original[c.lung_mask].mean() for c in valid]); mean_iqr = float(np.diff(np.percentile(means, [25, 75]))[0])
     return SimpleNamespace(scale=scale, interval=interval, limits=limits, ruler=ruler, mean_iqr=mean_iqr, settings=SimpleNamespace(wavelet='haar', min_tissue=.9))
+
+def context_to_dict(ctx) -> dict:
+    """Réguas e limites em JSON, para reaplicar a mesma calibração mais tarde."""
+    return {'glcm_scale': ctx.scale.as_dict(), 'density_interval': ctx.interval, 'density_limits': ctx.limits, 'mean_iqr': ctx.mean_iqr}
+
+def context_from_dict(data: dict) -> SimpleNamespace:
+    scale = RobustScale(**data['glcm_scale'])
+    return SimpleNamespace(scale=scale, interval=data['density_interval'], limits=data['density_limits'], ruler={'p1': scale.clip_low, 'p99': scale.clip_high},
+                           mean_iqr=data['mean_iqr'], settings=SimpleNamespace(wavelet='haar', min_tissue=.9))
 
 def evaluate_pair(case_id, original, synthetic, mask, ctx) -> dict:
     """Mede brilho, GLCM e Wavelet de um par e devolve a linha com a decisão final na frente."""
