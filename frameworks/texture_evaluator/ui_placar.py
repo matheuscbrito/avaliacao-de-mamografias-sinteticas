@@ -395,7 +395,7 @@ def brightness_chart(rows: list[dict]):
 
 def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
     if mode == "brilho":
-        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão oficial": official_brightness_status(row), "por quê": brightness_explanation(row), "densidade": density_reading(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"), "Wavelet LL |Δ|": ll_shift(row)} for row in rows]
+        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão oficial": official_brightness_status(row), "por quê": brightness_explanation(row), "densidade": density_reading(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"), "Wavelet LL": metric_reading(row, "wavelet", "ll"), "Wavelet LL |Δ|": ll_shift(row)} for row in rows]
     else:
         data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "leitura de textura": texture_decision(row)[0],
                  **technique_statuses(row), "por quê": texture_decision(row)[1],
@@ -428,7 +428,7 @@ def show_method_cards(mode: str):
         st.success("**Aprovada** — |Δμ| ≤ 0,314 **e** Sat31 ≤ 15%.")
         st.warning("**Revisão manual** — 0,314 < |Δμ| ≤ 0,629 **e** Sat31 ≤ 15%.")
         st.error("**Reprovada diretamente** — |Δμ| > 0,629 **ou** Sat31 > 15%.")
-        st.info("**Densidade** (pixels fora da faixa P1–P99 real e deslocamento da mediana) e **Wavelet LL** (brilho em baixa frequência, janela 4×4 px) complementam a inspeção. Nenhuma das duas altera a categoria oficial, que depende apenas de |Δμ| e Sat31.")
+        st.info("**Densidade** (pixels fora da faixa P1–P99 real e deslocamento da mediana) e **brilho segundo a Wavelet** (banda LL: média local de 4×4 px, só o brilho, sem a textura) complementam a inspeção. A Wavelet LL é classificada como as métricas de textura: Δ = LL da sintética − LL da original, em IQR da LL entre as CTs reais (até 1 aprovada, 1–2 revisão, acima de 2 reprovada). Nenhuma das duas altera a categoria oficial, que depende apenas de |Δμ| e Sat31.")
     else:
         st.markdown("#### Técnicas de textura usadas")
         st.dataframe(pd.DataFrame([
@@ -462,7 +462,7 @@ def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, versio
     st.subheader(f"Par em foco · {case_name(case_id)}")
     if mode == "brilho":
         st.markdown(f"**Gatekeeper oficial: {official_brightness_status(row)}.** {brightness_explanation(row)}")
-        st.markdown(f"**Densidade:** {density_reading(row)} · **Wavelet LL:** |Δ| {br(ll_shift(row))} (fração da régua)")
+        st.markdown(f"**Densidade:** {density_reading(row)} · **Brilho segundo a Wavelet (LL):** {metric_reading(row, 'wavelet', 'll')}")
         choices = {"CT real × sintética (Δμ)": "delta_mu", "Densidade · pixels fora da faixa real": "densidade", "Brilho local (Wavelet LL)": "ll"}
     else:
         verdict, _ = texture_decision(row)
@@ -538,7 +538,7 @@ if history is None:
             st.error(str(error))
     st.stop()
 
-if any(key not in history["calibration"] for key in ("nex_reference", "wavelet_iqr", "glcm_iqr")):
+if any(key not in history["calibration"] for key in ("nex_reference", "wavelet_iqr", "glcm_iqr", "ll_iqr")):
     st.warning("Este histórico foi calculado antes da integração do NEx ou da classificação por métrica GLCM/Wavelet. Recalcule as versões para aplicar as faixas reais aos resultados.")
     if st.button("Recalcular versões", type="primary"):
         with st.spinner("Recalculando GLCM, Wavelet e NEx..."):
@@ -591,7 +591,8 @@ if mode == "brilho":
     first, second, third = st.columns(3)
     first.metric("Densidade: mediana deslocada", int(density.get("brighter", 0) + density.get("darker", 0)), f"clareou ou escureceu · de {len(rows)} cortes")
     second.metric("Densidade: pixels fora da faixa real", int(density.get("too_bright", 0) + density.get("too_dark", 0)), f"claro ou escuro demais · de {len(rows)} cortes")
-    third.metric("Wavelet LL: |Δ| mediano", br(float(np.median([ll_shift(row) for row in rows]))), "brilho em baixa frequência")
+    ll = pd.Series([row["wavelet_ll_status"] for row in rows]).value_counts()
+    third.metric("Wavelet LL: fora da faixa", int(ll.get("revisão", 0) + ll.get("reprovada", 0)), " · ".join(f"{int(ll.get(status, 0))} {status}" for status in METRIC_STATUSES), delta_color="off")
 else:
     statuses = pd.Series([texture_decision(row)[0] for row in rows]).value_counts()
     first, second, third, fourth = st.columns(4)
@@ -653,6 +654,12 @@ else:
     st.markdown("#### Resposta do gatekeeper de brilho")
     st.caption("Verde = aprovada, amarelo = revisão manual e vermelho = rejeição direta. No gráfico de Sat31 não há faixa amarela: acima de 15% já reprova. Clique em um ponto para destacá-lo e abrir as CTs brutas daquele corte.")
     clicked_case = selectable_chart(st, brightness_chart(rows), "brightness_cohort")
+    st.markdown("#### Brilho segundo a Wavelet (LL)")
+    official = {"approved": "aprovada", "manual_review": "revisão", "hard_reject": "reprovada"}
+    agree = sum(official[row["brightness_status"]] == row["wavelet_ll_status"] for row in rows)
+    st.caption(f"Cada ponto é um corte: Δ = brilho LL da sintética − brilho LL da original, em IQR da LL entre as CTs reais. Mesmas cores e faixas do filtro oficial. "
+               f"Só leitura: não muda a decisão oficial. Concorda com o filtro oficial em {agree} de {len(rows)} cortes.")
+    clicked_case = selectable_chart(st, metric_chart(rows, "wavelet", "ll"), "wavelet_ll") or clicked_case
     if clicked_case and clicked_case != case_id:
         st.session_state["pending_case"] = clicked_case
         st.session_state["pending_mode"] = "brilho"

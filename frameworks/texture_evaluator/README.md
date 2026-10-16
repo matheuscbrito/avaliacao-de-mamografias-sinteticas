@@ -40,6 +40,8 @@ Cada corte sai com `final_status` (`aprovada`, `revisar` ou `rejeitar`) e os mot
 | Wavelet | 2 px, 4 px, entropia | a mesma regra (`wavelet_iqr`); o "tipo" (borrou, ruído…) descreve, não decide |
 | NEx | NEx na ROI | fora de P5–P95 das CTs reais = **revisão**; poucas janelas = inconclusivo, não pesa |
 
+**Brilho segundo a Wavelet (modo de brilho do painel).** A banda LL (média local de 4×4 px, só o brilho) recebe a mesma regra: Δ = LL da sintética − LL da original, em IQR da LL entre as CTs reais (`ll_iqr`; colunas `wavelet_ll_z` e `wavelet_ll_status`). É só leitura, ao lado do filtro oficial (Δμ, Sat31), e não muda nenhuma decisão.
+
 Colunas: `glcm_*_z`, `glcm_*_status`, `glcm_status`, `wavelet_*_z`, `wavelet_*_status`, `wavelet_status` e `nex_status`. O painel mostra uma matriz "quem disse o quê" (corte × técnica) e uma aba por técnica com os gráficos de cada métrica. A reprovação vale só na leitura de textura; o veredito final acima continua mandando textura para revisão. No Dsr: 8 preservadas, 29 revisão, 0 reprovadas; no Dgen: 2, 26 e 9. A regra é branda porque a textura varia muito entre cortes reais (o IQR do 2 px é ~47% da mediana).
 
 A validação com defeitos conhecidos está em [`resultados/teste_decisao/resumo.md`](../../resultados/teste_decisao/resumo.md):

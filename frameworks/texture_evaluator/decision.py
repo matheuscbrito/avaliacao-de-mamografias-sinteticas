@@ -70,6 +70,12 @@ def glcm_metric_columns(real: dict, synthetic: dict, iqr: dict) -> dict:
     return metric_columns("glcm", GLCM_METRICS, real, synthetic, iqr)
 
 
+def ll_columns(real: float, synthetic: float, iqr: float) -> dict:
+    """Brilho segundo a Wavelet (banda LL), na mesma regra de IQR. Só leitura: não entra em nenhum veredito."""
+    z = (synthetic - real) / max(iqr, 1e-12)
+    return {"wavelet_ll_z": z, "wavelet_ll_status": metric_status(z)}
+
+
 def technique_statuses(row: dict) -> dict:
     """Classificação de cada técnica de textura neste corte."""
     return {"GLCM": row["glcm_status"], "Wavelet": row["wavelet_status"], "NEx": NEX_STATUS[row.get("nex_status", "inconclusivo")]}
