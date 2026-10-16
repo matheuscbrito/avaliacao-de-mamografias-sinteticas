@@ -19,10 +19,9 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from frameworks.texture_evaluator.placar import (  # noqa: E402
-    CHANGE_NOTE, GROUPS, INDICATORS, VERSION_HEADER, PlacarError, add_version, build_board, case_map, change_table,
+    CHANGE_NOTE, GROUPS, INDICATORS, VERSION_HEADER, PlacarError, add_version, build_board, case_figure, change_table,
     count_table, figure, load_history, remove_version, score_table, version_table, write_outputs,
 )
-from frameworks.texture_evaluator.regional import MASK_ONLY  # noqa: E402
 
 # colunas da tabela por corte, por seção
 CASE_COLUMNS = {
@@ -147,22 +146,31 @@ if status != "todos":
 cases = cases.sort_values("case_id" if order == "corte" else sortable[order])
 st.dataframe(cases, hide_index=True, width="stretch")
 
-st.subheader("Mapa por região")
-entry = next(v for v in board["history"]["versions"] if v["name"] == version)
-if entry.get("mode") == MASK_ONLY:
-    st.markdown(f"{version} está no modo só máscara: a sintética não tem a mesma anatomia da original, então o mapa por região não se aplica.")
-elif not len(cases):
+# ---------------------------------------------------------------- um corte em todas as versões
+st.header("Um corte em todas as versões")
+st.markdown("Escolha um corte (a lista segue o filtro e a ordem da tabela acima) para ver a original e a sintética de cada versão do histórico lado a lado, com o mapa de brilho e o de textura de cada uma.")
+if not len(cases):
     st.markdown("Nenhum corte com esse filtro.")
 else:
     case_id = st.selectbox("Corte", list(cases["case_id"]))
-    row = next(r for r in board["rows"][version] if r["case_id"] == case_id)
-    st.markdown(f"Veredito: {row['final_status']} · {row['final_reasons']}")
+    compare_columns = ["final_status", "final_reasons", "pair_status", "abs_delta_mu", "wavelet_verdict", "wavelet_fine_pct", "wavelet_coarse_pct", "map_area_textura_alterada_pct", "map_corr_textura"]
+    per_version = pd.DataFrame([{"versão": name, **{column: next(r for r in board["rows"][name] if r["case_id"] == case_id)[column] for column in compare_columns}} for name in names])
+    for column in per_version.columns:
+        numeric = pd.to_numeric(per_version[column], errors="coerce")
+        if numeric.notna().any():
+            per_version[column] = numeric.round(3)
+    st.dataframe(per_version, hide_index=True, width="stretch")
     try:
-        fig = case_map(history_dir, version, case_id)
+        with st.spinner("Desenhando..."):
+            fig = case_figure(history_dir, case_id)
         st.pyplot(fig, width="stretch")
         plt.close(fig)
     except PlacarError as error:
         st.error(str(error))
-    st.markdown("Blocos de 16 px com ≥ 90% de pulmão. Brilho: deslocamento da média do bloco em relação ao mesmo bloco da original (vermelho = mais claro, azul = mais escuro). Textura: veredito Wavelet do bloco.")
+    st.markdown(
+        "Blocos de 16 px com ≥ 90% de pulmão (contorno pontilhado = área avaliada), cada um comparado com o mesmo bloco da original. "
+        "Brilho: preto = escureceu, branco = clareou além da tolerância; sem preenchimento = dentro da tolerância. "
+        "Textura: veredito Wavelet do bloco. Versões no modo só máscara mostram a imagem, mas não o mapa."
+    )
 
 st.markdown(f"Arquivos em {short(history_dir)}: placar.md, placar.csv, comparacao.csv, por_caso.csv")

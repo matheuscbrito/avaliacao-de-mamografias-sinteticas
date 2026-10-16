@@ -44,7 +44,7 @@ O placar separa os indicadores em três grupos:
 | Brilho | \|Δμ\|, % dos cortes com brilho sinalizado (filtro ou densidade), **área do pulmão com brilho local alterado** (mapa) |
 | Textura | detalhe fino e grosso, razão fino/grosso, contraste GLCM, % dos cortes com textura alterada, **área do pulmão com textura alterada** e **correlação espacial da textura** (mapa) |
 
-O **mapa por região** divide o pulmão em blocos de 16 px e dá a cada bloco o deslocamento de brilho e o veredito de textura, comparando com o mesmo bloco da original (`mapa_exemplo.png`: o corte do Dsr com a textura menos no lugar, correlação 0,58). Na interface, qualquer corte pode ser aberto no mapa.
+O **mapa por região** divide o pulmão em blocos de 16 px e compara cada bloco com o mesmo bloco da original, em dois mapas separados: **brilho** (preto = escureceu, branco = clareou além da tolerância; sem preenchimento = normal) e **textura** (veredito Wavelet do bloco). Na interface, qualquer corte pode ser aberto em **todas as versões do histórico lado a lado**. Versões no modo só máscara mostram a imagem, mas não o mapa. Em `mapa_exemplo.png` está o corte 053, que escureceu no Dsr: 80% do pulmão mais escuro, e a textura borrada em quase todo o pulmão.
 
 No Dsr: em mediana, 93% da área do pulmão tem textura alterada (sobretudo "borrou"), a textura está nos lugares certos (correlação 0,87), e quase nenhuma área tem brilho local alterado.
 

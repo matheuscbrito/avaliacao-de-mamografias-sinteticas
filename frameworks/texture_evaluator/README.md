@@ -58,7 +58,7 @@ Para acompanhar o modelo ao longo das iterações. Cada versão é a pasta de sa
   --version v2=CAMINHO/DA/VERSAO2
 ```
 
-Cada par é montado pelo nome (`X.tiff` ↔ `X_generate.tiff` ↔ `X_mask.tiff`) e conferido em [`regional.py`](regional.py). No modo **mesma anatomia** (como o Dsr), um par com correlação < 0,5 com a original é rejeitado como suspeito (arquivo trocado?). No modo **só máscara** (como o Dgen), o par só é conferido pelo nome e o mapa por região não se aplica. O placar e a interface separam **veredito final**, **brilho** e **textura**; o mapa por região (blocos de 16 px) entra como indicadores de área e correlação espacial, e a interface abre o mapa de qualquer corte.
+Cada par é montado pelo nome (`X.tiff` ↔ `X_generate.tiff` ↔ `X_mask.tiff`) e conferido em [`regional.py`](regional.py). No modo **mesma anatomia** (como o Dsr), um par com correlação < 0,5 com a original é rejeitado como suspeito (arquivo trocado?). No modo **só máscara** (como o Dgen), o par só é conferido pelo nome e o mapa por região não se aplica. O placar e a interface separam **veredito final**, **brilho** e **textura**; o mapa por região (blocos de 16 px) entra como indicadores de área e correlação espacial, e a interface mostra qualquer corte em todas as versões lado a lado, com um mapa de brilho e outro de textura.
 
 `--remove NOME` tira uma versão. O resultado fica em `placar.md` (mediana de cada indicador com intervalo de 95%, vereditos e se cada versão melhorou, piorou ou não mudou em relação à anterior), `placar.csv`, `comparacao.csv` e `por_caso.csv`. Exemplo e validação em [`resultados/placar_versoes/resumo.md`](../../resultados/placar_versoes/resumo.md).
 

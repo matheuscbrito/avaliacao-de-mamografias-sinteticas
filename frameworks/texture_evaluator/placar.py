@@ -44,10 +44,11 @@ from typing import Callable, NamedTuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Patch
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch, Rectangle
 
 from wavelet.src.load_data import CasePaths, discover_cases
-from wavelet.src.mapa_regioes import VERDICT_COLORS, VERDICTS, draw_row
+from wavelet.src.mapa_regioes import VERDICT_COLORS, VERDICTS
 from wavelet.src.run_pipeline import write_csv
 from wavelet.src.validate_cases import ValidCase, validate_case
 from frameworks.texture_evaluator.regional import MASK_ONLY, apply_pair_check, regional
@@ -301,26 +302,74 @@ def build_board(history_dir: Path) -> dict | None:
     }
 
 
-def case_map(history_dir: Path, version: str, case_id: str):
-    """Figura do mapa por região de um corte: original, sintética, brilho e textura por bloco."""
-    history = load_history(history_dir)
-    entry = next(v for v in history["versions"] if v["name"] == version)
-    if entry.get("mode") == MASK_ONLY:
-        raise PlacarError(f"{version} está no modo só máscara: a sintética não tem a mesma anatomia da original, então o mapa por região não se aplica")
+# brilho em preto e branco (escureceu = preto, clareou = branco), para não se confundir com as cores da textura
+BRIGHT_STYLE = {"mais escuro": dict(facecolor="black", edgecolor="black"), "mais claro": dict(facecolor="white", edgecolor="black")}
+
+
+def load_case(entry: dict, case_id: str) -> ValidCase:
     paths = next((p for p in case_paths(Path(entry["folder"]), Path(entry["mask_dir"]) if entry["mask_dir"] else None) if p.case_id == case_id), None)
     if paths is None:
         raise PlacarError(f"{case_id} não encontrado em {entry['folder']}")
     case = validate_case(paths, erosion_radius=2)
     if not isinstance(case, ValidCase):
-        raise PlacarError(f"{case_id}: {case.reason}")
+        raise PlacarError(f"{case_id} em {entry['name']}: {case.reason}")
+    return case
+
+
+def case_figure(history_dir: Path, case_id: str):
+    """Um corte em todas as versões do histórico, lado a lado.
+
+    Colunas: a original e cada versão. Linhas: a imagem; o brilho por bloco (só
+    os blocos que clarearam ou escureceram além da tolerância); o veredito de
+    textura por bloco. Cada linha tem a própria legenda. Versões no modo só
+    máscara mostram a imagem, mas não o mapa.
+    """
+    history = load_history(history_dir)
     ctx = context_from_dict(history["calibration"])
-    readings, lung, stats = regional(case.original, case.synthetic, case.lung_mask, ctx)
-    fig, axes = plt.subplots(2, 2, figsize=(10, 9.5))
-    draw_row(axes.ravel(), f"Sintética ({version})", case, case.synthetic, readings, lung, ctx.interval, 16, stats)
-    handles = [Patch(color=color, label=name) for name, color in zip(VERDICTS, VERDICT_COLORS)]
-    handles += [Patch(color="#d6604d", label="brilho: mais claro"), Patch(color="#4393c3", label="brilho: mais escuro")]
-    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=8, frameon=False)
-    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    versions = history["versions"]
+    cases = [load_case(entry, case_id) for entry in versions]
+    reference = cases[0]
+    rows_, cols_ = np.where(reference.lung_mask)
+    crop = (cols_.min() - 6, cols_.max() + 6, rows_.max() + 6, rows_.min() - 6)
+    window = dict(cmap="gray", vmin=ctx.interval["p1"], vmax=ctx.interval["p99"])
+
+    fig, axes = plt.subplots(3, len(versions) + 1, figsize=(3.4 * (len(versions) + 1), 9.6), squeeze=False)
+    for axis in axes.ravel():
+        axis.axis("off")
+    axes[0, 0].imshow(reference.original, **window)
+    axes[0, 0].set_title("Original", fontsize=9)
+    axes[1, 0].legend(handles=[Patch(label=name, linewidth=.8, **style) for name, style in BRIGHT_STYLE.items()] + [Patch(facecolor="none", edgecolor="black", linestyle=":", label="área avaliada")],
+                      title="Brilho por bloco (16 px)", loc="center", fontsize=8, title_fontsize=9, frameon=False)
+    axes[2, 0].legend(handles=[Patch(color=color, label=name) for name, color in zip(VERDICTS, VERDICT_COLORS)],
+                      title="Textura por bloco (16 px)", loc="center", fontsize=8, title_fontsize=9, frameon=False)
+    for column, (entry, case) in enumerate(zip(versions, cases), start=1):
+        axes[0, column].imshow(case.synthetic, **window)
+        axes[0, column].set_title(entry["name"], fontsize=9)
+        if entry.get("mode") == MASK_ONLY:
+            for row in (1, 2):
+                axes[row, column].text(.5, .5, "só máscara:\noutro pulmão no mesmo\ncontorno, mapa não se aplica", ha="center", va="center", fontsize=8, transform=axes[row, column].transAxes)
+            continue
+        readings, lung, stats = regional(case.original, case.synthetic, case.lung_mask, ctx)
+        extent = (0, lung.shape[1] * 16, lung.shape[0] * 16, 0)
+        evaluated = np.kron(lung, np.ones((16, 16)))
+        shift = ctx.maps["bright_shift"]
+        texture = np.where(lung, readings["verdict"], np.nan).astype(float)
+        for row in (1, 2):
+            axes[row, column].imshow(case.synthetic, **window, alpha=.45)
+            axes[row, column].contour(evaluated, levels=[.5], colors="black", linewidths=.6, linestyles=":")
+        for (y, x) in zip(*np.where(lung)):
+            name = "mais claro" if readings["ll"][y, x] > shift else "mais escuro" if readings["ll"][y, x] < -shift else None
+            if name:
+                axes[1, column].add_patch(Rectangle((x * 16, y * 16), 16, 16, linewidth=.8, **BRIGHT_STYLE[name]))
+        axes[1, column].set_title(f"{stats['area_mais_claro']:.0%} mais claro · {stats['area_mais_escuro']:.0%} mais escuro", fontsize=8)
+        axes[2, column].imshow(texture, cmap=ListedColormap(VERDICT_COLORS), vmin=-.5, vmax=len(VERDICTS) - .5, extent=extent, alpha=.85, interpolation="nearest")
+        axes[2, column].set_title(f"{1 - stats['area_textura preservada']:.0%} alterada · correlação {stats['correlacao_textura']:.2f}", fontsize=8)
+    for axis in axes.ravel():
+        if axis.images:
+            axis.contour(reference.lung_mask, levels=[.5], colors="#00a36c", linewidths=.5)
+            axis.set_xlim(crop[0], crop[1])
+            axis.set_ylim(crop[2], crop[3])
+    fig.tight_layout()
     return fig
 
 
