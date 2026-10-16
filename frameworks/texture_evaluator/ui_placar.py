@@ -194,7 +194,7 @@ def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling:
 
 
 def brightness_chart(rows: list[dict]):
-    """Os dois gráficos oficiais de brilho; passar o mouse num ponto mostra o corte."""
+    """Os gráficos oficiais de brilho, com faixas e seleção do corte por clique."""
     data = pd.DataFrame({
         "case_id": [row["case_id"] for row in rows],
         "corte": [case_name(row["case_id"]) for row in rows],
@@ -203,23 +203,31 @@ def brightness_chart(rows: list[dict]):
         "sat31": [number(row, "sat31_pct") for row in rows],
         "decisão": [official_brightness_status(row) for row in rows],
     })
-    base = alt.Chart(data).mark_circle(size=75, color="#0d6b61").encode(
+    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", nearest=True, empty=False)
+    decision_colors = alt.Scale(domain=["aprovada", "revisão manual", "rejeição direta"], range=["#0b6b32", "#925a10", "#9f1f18"])
+    base = alt.Chart(data).mark_circle(filled=True).encode(
         x=alt.X("ordem:Q", title="cortes do dataset"),
+        color=alt.Color("decisão:N", title="decisão oficial", scale=decision_colors),
+        size=alt.condition(selection, alt.value(285), alt.value(118)),
+        stroke=alt.condition(selection, alt.value("#17243b"), alt.value("#24352d")),
+        strokeWidth=alt.condition(selection, alt.value(2.2), alt.value(.9)),
         tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("delta_mu:Q", title="Δμ", format="+.3f"), alt.Tooltip("sat31:Q", title="Sat31 (%)", format=".2f"), alt.Tooltip("decisão:N")],
-        opacity=alt.value(.8),
-    )
-    review_rules = alt.Chart(pd.DataFrame({"limite": [-OFFICIAL_REVIEW, OFFICIAL_REVIEW]})).mark_rule(color="#8a5a22", strokeDash=[4, 4]).encode(y=alt.Y("limite:Q"))
-    reject_rules = alt.Chart(pd.DataFrame({"limite": [-OFFICIAL_REJECT, OFFICIAL_REJECT]})).mark_rule(color="#b42318", strokeDash=[4, 4]).encode(y=alt.Y("limite:Q"))
-    sat_rule = alt.Chart(pd.DataFrame({"limite": [OFFICIAL_SATURATION]})).mark_rule(color="#b42318", strokeDash=[4, 4]).encode(y="limite:Q")
-    delta = (review_rules + reject_rules + base.encode(y=alt.Y("delta_mu:Q", title="Δμ · sintética − real"))).properties(title="Δμ por corte", height=280)
-    saturation = (sat_rule + base.encode(y=alt.Y("sat31:Q", title="Sat31 (%)"))).properties(title="Saturação no tom 31", height=280)
-    return [chart.configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None) for chart in (delta, saturation)]
-
-
-def draw_charts(charts: list, per_row: int = 2) -> None:
-    for start in range(0, len(charts), per_row):
-        for column, chart in zip(st.columns(per_row), charts[start:start + per_row]):
-            column.altair_chart(chart, use_container_width=True)
+        opacity=alt.value(1),
+    ).add_params(selection)
+    delta_limit = max(.70, float(data["delta_mu"].abs().max()) * 1.12)
+    sat_limit = max(16.0, float(data["sat31"].max()) * 1.12)
+    delta_scale, sat_scale = alt.Scale(domain=[-delta_limit, delta_limit]), alt.Scale(domain=[0, sat_limit])
+    band_colors = alt.Scale(domain=["aprovada", "revisão manual", "rejeição direta"], range=["#dff3e5", "#fff0c2", "#fde3e1"])
+    delta_bands = pd.DataFrame([{"início": -delta_limit, "fim": -OFFICIAL_REJECT, "faixa": "rejeição direta"}, {"início": -OFFICIAL_REJECT, "fim": -OFFICIAL_REVIEW, "faixa": "revisão manual"}, {"início": -OFFICIAL_REVIEW, "fim": OFFICIAL_REVIEW, "faixa": "aprovada"}, {"início": OFFICIAL_REVIEW, "fim": OFFICIAL_REJECT, "faixa": "revisão manual"}, {"início": OFFICIAL_REJECT, "fim": delta_limit, "faixa": "rejeição direta"}])
+    sat_bands = pd.DataFrame([{"início": 0, "fim": OFFICIAL_SATURATION, "faixa": "aprovada"}, {"início": OFFICIAL_SATURATION, "fim": sat_limit, "faixa": "rejeição direta"}])
+    def bands(frame: pd.DataFrame, scale: alt.Scale, title: str):
+        return alt.Chart(frame).mark_rect(opacity=.14).encode(y=alt.Y("início:Q", scale=scale, title=title), y2="fim:Q", color=alt.Color("faixa:N", scale=band_colors, legend=None))
+    review = alt.Chart(pd.DataFrame({"limite": [-OFFICIAL_REVIEW, OFFICIAL_REVIEW]})).mark_rule(color="#b7791f", opacity=.7, strokeDash=[4, 4]).encode(y=alt.Y("limite:Q", scale=delta_scale, title="Δμ · sintética − real"))
+    reject = alt.Chart(pd.DataFrame({"limite": [-OFFICIAL_REJECT, OFFICIAL_REJECT]})).mark_rule(color="#b42318", opacity=.7, strokeDash=[4, 4]).encode(y=alt.Y("limite:Q", scale=delta_scale, title="Δμ · sintética − real"))
+    saturation_rule = alt.Chart(pd.DataFrame({"limite": [OFFICIAL_SATURATION]})).mark_rule(color="#b42318", opacity=.7, strokeDash=[4, 4]).encode(y=alt.Y("limite:Q", scale=sat_scale, title="Sat31 (%)"))
+    delta = (bands(delta_bands, delta_scale, "Δμ · sintética − real") + review + reject + base.encode(y=alt.Y("delta_mu:Q", title="Δμ · sintética − real", scale=delta_scale))).properties(title="Δμ por corte", width=390, height=280)
+    saturation = (bands(sat_bands, sat_scale, "Sat31 (%)") + saturation_rule + base.encode(y=alt.Y("sat31:Q", title="Sat31 (%)", scale=sat_scale), color=alt.Color("decisão:N", title="decisão oficial", scale=decision_colors, legend=None))).properties(title="Saturação no tom 31", width=390, height=280)
+    return alt.hconcat(delta, saturation).configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None)
 
 
 def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
@@ -236,14 +244,23 @@ def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
 
 def show_method_cards(mode: str):
     if mode == "brilho":
-        st.markdown("#### O que decide o filtro de brilho")
-        st.caption("A decisão oficial sempre considera as duas medidas: diferença de tom médio (|Δμ|) e porcentagem de pixels no tom 31 (Sat31).")
-        first, second, third = st.columns(3)
-        first.metric("Aprovada", f"|Δμ| ≤ {br(OFFICIAL_REVIEW)}", "Sat31 ≤ 15% · ambas dentro da faixa")
-        second.metric("Revisão manual", f"|Δμ| em {br(OFFICIAL_REVIEW)}–{br(OFFICIAL_REJECT)}", "Sat31 ≤ 15% · Δμ pede inspeção")
-        third.metric("Rejeição direta", f"|Δμ| > {br(OFFICIAL_REJECT)}", "ou Sat31 > 15%")
-        st.caption(f"Os limites são 1 e 2 IQR das médias pulmonares das CTs reais de referência ({br(OFFICIAL_REVIEW)} nesta calibração).")
-        st.info("Duas leituras complementares acompanham o filtro: a **densidade**, que conta pixels do pulmão fora da faixa P1–P99 das CTs reais e mede o deslocamento da mediana, e a **Wavelet LL**, que mede o brilho em baixa frequência (média local de 4×4 px). Elas não mudam a categoria oficial, que depende somente de |Δμ| e Sat31.")
+        st.markdown("#### Como o filtro de brilho decide")
+        st.write("Cada corte passa por **dois filtros oficiais**. A categoria vem da combinação deles — não de apenas um número.")
+        tone, saturation = st.columns(2)
+        with tone:
+            st.markdown("**Filtro 1 · diferença média de brilho (|Δμ|)**")
+            st.caption("Compara o tom médio da CT sintética com o da CT real.")
+            st.markdown("- Até **0,314**: dentro da faixa\n- De **0,314 a 0,629**: revisão manual\n- Acima de **0,629**: reprovação direta")
+        with saturation:
+            st.markdown("**Filtro 2 · saturação no tom 31 (Sat31)**")
+            st.caption("Mostra quantos pixels chegaram ao maior tom da régua de 32 níveis.")
+            st.markdown("- Até **15%**: dentro da faixa\n- Acima de **15%**: reprovação direta")
+
+        st.markdown("##### Resultado da combinação")
+        st.success("**Aprovada** — |Δμ| ≤ 0,314 **e** Sat31 ≤ 15%.")
+        st.warning("**Revisão manual** — 0,314 < |Δμ| ≤ 0,629 **e** Sat31 ≤ 15%.")
+        st.error("**Reprovada diretamente** — |Δμ| > 0,629 **ou** Sat31 > 15%.")
+        st.info("**Densidade** (pixels fora da faixa P1–P99 real e deslocamento da mediana) e **Wavelet LL** (brilho em baixa frequência, janela 4×4 px) complementam a inspeção. Nenhuma das duas altera a categoria oficial, que depende apenas de |Δμ| e Sat31.")
     else:
         st.markdown("#### Técnicas de textura usadas")
         st.dataframe(pd.DataFrame([
@@ -389,8 +406,15 @@ if mode == "textura":
     draw_charts(texture_chart(rows, glcm_ceiling, wavelet_ceiling))
 else:
     st.markdown("#### Resposta do gatekeeper de brilho")
-    st.caption("Passe o mouse num ponto para ver o corte. Linhas tracejadas indicam os limites oficiais de revisão e rejeição. Para abrir um corte, clique na linha dele na tabela abaixo.")
-    draw_charts(brightness_chart(rows))
+    st.caption("Verde = aprovada, amarelo = revisão manual e vermelho = rejeição direta. No gráfico de Sat31 não há faixa amarela: acima de 15% já reprova. Clique em um ponto para destacá-lo e abrir as CTs brutas daquele corte.")
+    event = st.altair_chart(brightness_chart(rows), use_container_width=True, on_select="rerun", selection_mode="cut", key="brightness_cohort")
+    picked = event.selection.get("cut", [])
+    if picked:
+        clicked_case = picked[0].get("case_id")
+        if clicked_case and clicked_case != case_id:
+            st.session_state["pending_case"] = clicked_case
+            st.session_state["pending_mode"] = "brilho"
+            st.rerun()
 with st.expander("Ver todos os cortes e o motivo", expanded=True):
     table = metrics_table(rows, mode)
     # reset_index: a linha clicada volta como posição, e ela precisa bater com a ordem mostrada
