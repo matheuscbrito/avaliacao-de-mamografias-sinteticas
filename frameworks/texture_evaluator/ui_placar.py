@@ -34,6 +34,7 @@ DATASETS = {
 # lidos da calibração do histórico (ver `calibration_limits`), para a UI nunca divergir do framework
 OFFICIAL_REVIEW, OFFICIAL_REJECT, OFFICIAL_SATURATION = float("nan"), float("nan"), 15.0
 STATUS_TEXT = {"approved": "aprovada", "manual_review": "revisão manual", "hard_reject": "rejeição direta"}
+DENSITY_TEXT = {"ok": "normal", "brighter": "clareou", "darker": "escureceu", "too_bright": "claro demais", "too_dark": "escuro demais"}
 
 
 def resolve(text: str) -> Path:
@@ -89,6 +90,15 @@ def brightness_explanation(row: dict) -> str:
     if delta > OFFICIAL_REVIEW:
         return f"|Δμ| {delta:.3f} está entre {br(OFFICIAL_REVIEW)} e {br(OFFICIAL_REJECT)}"
     return f"|Δμ| {delta:.3f} e Sat31 {saturation:.1f}% dentro do gatekeeper"
+
+
+def density_reading(row: dict) -> str:
+    """Densidade: pixels fora da faixa P1–P99 real e deslocamento da mediana do pulmão (em IQR das originais)."""
+    return f"{DENSITY_TEXT[row['density_status']]} (mediana {number(row, 'density_median_shift_iqr'):+.2f} IQR)".replace(".", ",")
+
+
+def ll_shift(row: dict) -> float:
+    return abs(number(row, "wavelet_ll_synthetic") - number(row, "wavelet_ll_real"))
 
 
 def texture_explanation(row: dict) -> str:
@@ -214,7 +224,7 @@ def draw_charts(charts: list, per_row: int = 2) -> None:
 
 def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
     if mode == "brilho":
-        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão oficial": official_brightness_status(row), "por quê": brightness_explanation(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"), "Wavelet LL |Δ|": abs(number(row, "wavelet_ll_synthetic") - number(row, "wavelet_ll_real"))} for row in rows]
+        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão oficial": official_brightness_status(row), "por quê": brightness_explanation(row), "densidade": density_reading(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"), "Wavelet LL |Δ|": ll_shift(row)} for row in rows]
     else:
         data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "leitura exploratória": row.get("wavelet_verdict", "n/a"), "o que mudou": texture_explanation(row), "GLCM contraste (%)": number(row, "glcm_contrast_pct"), "GLCM energia (%)": 100 * number(row, "glcm_energy_synthetic") / number(row, "glcm_energy_real"), "Wavelet 2 px (%)": number(row, "wavelet_fine_pct"), "Wavelet 4 px (%)": number(row, "wavelet_coarse_pct"), "Wavelet entropia Δ": number(row, "wavelet_entropy_synthetic") - number(row, "wavelet_entropy_real")} for row in rows]
     frame = pd.DataFrame(data)
@@ -233,7 +243,7 @@ def show_method_cards(mode: str):
         second.metric("Revisão manual", f"|Δμ| em {br(OFFICIAL_REVIEW)}–{br(OFFICIAL_REJECT)}", "Sat31 ≤ 15% · Δμ pede inspeção")
         third.metric("Rejeição direta", f"|Δμ| > {br(OFFICIAL_REJECT)}", "ou Sat31 > 15%")
         st.caption(f"Os limites são 1 e 2 IQR das médias pulmonares das CTs reais de referência ({br(OFFICIAL_REVIEW)} nesta calibração).")
-        st.info("Wavelet LL ajuda a interpretar a variação de brilho em baixa frequência no corte. É complementar: não muda a categoria oficial, que depende somente de |Δμ| e Sat31.")
+        st.info("Duas leituras complementares acompanham o filtro: a **densidade**, que conta pixels do pulmão fora da faixa P1–P99 das CTs reais e mede o deslocamento da mediana, e a **Wavelet LL**, que mede o brilho em baixa frequência (média local de 4×4 px). Elas não mudam a categoria oficial, que depende somente de |Δμ| e Sat31.")
     else:
         st.markdown("#### Técnicas de textura usadas")
         st.dataframe(pd.DataFrame([
@@ -251,7 +261,8 @@ def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, versio
     st.subheader(f"Par em foco · {case_name(case_id)}")
     if mode == "brilho":
         st.markdown(f"**Gatekeeper oficial: {official_brightness_status(row)}.** {brightness_explanation(row)}")
-        choices = {"CT real × sintética (Δμ)": "delta_mu", "Pixels extremos (contexto exploratório)": "densidade", "Brilho local (Wavelet LL)": "ll"}
+        st.markdown(f"**Densidade:** {density_reading(row)} · **Wavelet LL:** |Δ| {br(ll_shift(row))} (fração da régua)")
+        choices = {"CT real × sintética (Δμ)": "delta_mu", "Densidade · pixels fora da faixa real": "densidade", "Brilho local (Wavelet LL)": "ll"}
     else:
         st.markdown(f"**Leitura de textura: {row.get('wavelet_verdict', 'n/a')}.** {texture_explanation(row)}")
         choices = {"GLCM · contraste": "glcm_contraste", "Wavelet · detalhe fino": "wavelet_fina", "Wavelet · detalhe grosso": "wavelet_grossa"}
@@ -353,6 +364,12 @@ if mode == "brilho":
     first.metric("Aprovadas pelo gatekeeper", int(statuses.get("aprovada", 0)), f"de {len(rows)} cortes")
     second.metric("Para revisão manual", int(statuses.get("revisão manual", 0)), "regra oficial")
     third.metric("Rejeições diretas", int(statuses.get("rejeição direta", 0)), "regra oficial")
+    st.markdown("#### Leituras complementares")
+    density = pd.Series([row["density_status"] for row in rows]).value_counts()
+    first, second, third = st.columns(3)
+    first.metric("Densidade: mediana deslocada", int(density.get("brighter", 0) + density.get("darker", 0)), f"clareou ou escureceu · de {len(rows)} cortes")
+    second.metric("Densidade: pixels fora da faixa real", int(density.get("too_bright", 0) + density.get("too_dark", 0)), f"claro ou escuro demais · de {len(rows)} cortes")
+    third.metric("Wavelet LL: |Δ| mediano", br(float(np.median([ll_shift(row) for row in rows]))), "brilho em baixa frequência")
 else:
     below_identity = sum(number(row, "glcm_contrast_pct") < 100 for row in rows)
     median_contrast = np.median([number(row, "glcm_contrast_pct") for row in rows])
