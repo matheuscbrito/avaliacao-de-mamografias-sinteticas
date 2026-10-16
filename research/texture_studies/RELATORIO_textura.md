@@ -285,6 +285,7 @@ Em ordem de importância:
 
 3. **De onde vem a alternância de 2 px?** Assinatura de convolução transposta / pixel-shuffle no upsampling do decodificador AEKL.
    → Separa real de sintético com AUC 1,000 e é provavelmente o defeito mais fácil de corrigir (upsample+conv em vez de conv transposta).
+   → *Nota de 16/10/2026:* no CT Dsr, essa hipótese não se confirmou: a passagem isolada pelo AEKL explica ~8 % do deslocamento do NEx, e o resto aparece na difusão/amostragem ([`resultados/origem_assinatura_nex/resumo.md`](../../resultados/origem_assinatura_nex/resumo.md)). Para o `gen-fid` mamográfico, a pergunta continua aberta.
 
 4. **As ROIs reais vieram do DICOM ou da versão JPEG?** Recorte nativo ou redimensionado? Qual o pixel spacing?
    → ~25 % da **referência** está comprimida, e sem spacing β fica sem comparação com a literatura.

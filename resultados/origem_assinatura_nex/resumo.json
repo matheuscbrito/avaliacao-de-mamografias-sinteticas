@@ -1,0 +1,19 @@
+{
+  "pergunta": "em que etapa do gerador aparece o deslocamento do NEx do Dsr",
+  "resposta": "difusao/amostragem (ja na primeira previsao x0); AEKL isolado explica ~8%",
+  "amostra": {"cortes": 100, "pacientes": 3, "cortes_por_paciente": [9, 13, 78]},
+  "medicao_nex": "imagem inteira 512x512, fundo harmonizado; nao comparavel com a ROI do MVP",
+  "reconstrucao_aekl_20260925": {
+    "mediana_nex": {"R": 0.151, "A(R)": 0.238, "S": 0.714, "A(S)": 0.793},
+    "mediana_delta_AEKL": 0.048, "mediana_delta_pipeline": 0.609, "razao": 0.078,
+    "auc": {"R_vs_AR": 0.569, "R_vs_S": 0.922, "AR_vs_S": 0.887}
+  },
+  "trajetoria_20261002": {
+    "mediana_nex": {"real": 0.151, "A(R)": 0.238, "x0_10pct": 0.926, "x0_50pct": 0.501, "final": 0.690},
+    "mediana_contraste_glcm": {"real": 4.70, "A(R)": 4.51, "x0_10pct": 1.10, "final": 1.31},
+    "delta_nex_pareado": {"A(R)": 0.048, "x0_10pct": 0.804, "final": 0.580},
+    "pares_acima_do_real": {"A(R)": 65, "x0_10pct": 91, "final": 96},
+    "delta_nex_final_por_paciente": {"A": 0.577, "B": 0.128, "C": 0.666}
+  },
+  "exploratorio": true
+}

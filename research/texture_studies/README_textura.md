@@ -97,5 +97,9 @@ notebooks/               00 inventário · 01 espectro/razão · 02 métricas ·
    Há redução interna, com qual fator e método?
 2. A saída é reescalada para a faixa do real? (observado `syn ≈ 0,38·real + 0,34`)
 3. De onde vem a alternância de 2 px — estágio de upsampling do decodificador AEKL?
+   *(Nota de 16/10/2026: no CT Dsr, a pergunta análoga foi testada e a assinatura aparece na
+   difusão/amostragem, não no AEKL isolado — ver
+   [`resultados/origem_assinatura_nex/resumo.md`](../../resultados/origem_assinatura_nex/resumo.md).
+   Para o `gen-fid` mamográfico, que é outro modelo, a pergunta continua aberta.)*
 4. As ROIs reais vêm de DICOM nativo ou da versão JPEG? Recorte nativo ou
    redimensionado? Qual o pixel spacing?
