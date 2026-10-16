@@ -10,7 +10,7 @@
 ## Como o NEx foi medido aqui
 
 - NEx = `max(NEx_x, NEx_y)` (`wavelet/src/nyquist_excess.py` é cópia da mesma fórmula), em décadas (log10 da razão pico/fundo perto de Nyquist).
-- **Imagem inteira 512×512**, com o fundo harmonizado (`harmonize_background`: fundo fora da máscara ≥ 0,5 levado a z-score de y = 0). **Não** é a ROI pulmonar erodida do MVP: os valores daqui não são comparáveis diretamente com os do `run_mvp`.
+- **Imagem inteira 512×512**, com o fundo harmonizado (`harmonize_background`: fundo fora da máscara ≥ 0,5 levado a z-score de y = 0). **Não** é a ROI pulmonar erodida do MVP: os valores daqui não são comparáveis diretamente com os do `run_mvp`. A faixa real na ROI do MVP está em [`nex_referencia_roi`](../nex_referencia_roi/resumo.md).
 - A GLCM desta análise usa a régua antiga (P1–P99 dos reais, imagem inteira), não a régua Tukey k=3 do MVP.
 - Unidade: corte. Os cortes de um paciente não são independentes; p-valores e ICs são descritivos.
 

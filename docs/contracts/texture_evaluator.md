@@ -14,6 +14,6 @@ Cada módulo deve devolver uma linha por imagem com `case_id`, `image_type` (`re
 
 - Não misturar resultados de versões diferentes de pré-processamento.
 - GLCM usa a régua robusta calibrada nos reais; Wavelet e NEx devem declarar explicitamente qualquer normalização própria.
-- NEx não tem normalização própria: é invariante a `a·I + b` (brilho e ganho). Os números de referência atuais foram medidos na imagem inteira com fundo harmonizado, não na ROI erodida; ao integrar, a referência real precisa ser recalculada na ROI do MVP.
+- NEx não tem normalização própria: é invariante a `a·I + b` (brilho e ganho). Na ROI, o NEx é a mediana de janelas de 32 px inteiramente dentro da ROI erodida; a faixa real nessa ROI (mediana 0,03, IQR 0,23, P95 0,25) está em [`resultados/nex_referencia_roi/resumo.md`](../../resultados/nex_referencia_roi/resumo.md). Os números de `origem_assinatura_nex` são da imagem inteira e não servem de limite no MVP.
 - NEx não identifica a causa da diferença. No Dsr, a assinatura aparece na difusão/amostragem, não no AEKL isolado ([`resultados/origem_assinatura_nex/resumo.md`](../../resultados/origem_assinatura_nex/resumo.md)); motivos de revisão baseados nele não devem atribuí-la ao decodificador.
 - ROC/AUC avalia capacidade de detectar diferenças entre reais e sintéticas. AUC alta é alerta de separação, não selo de qualidade da síntese.
