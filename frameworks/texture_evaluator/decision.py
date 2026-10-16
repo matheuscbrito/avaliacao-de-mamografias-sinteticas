@@ -27,6 +27,30 @@ DENSITY_TEXT = {"brighter": "clareou", "darker": "escureceu", "too_bright": "cla
 FINAL_STATUSES = ("aprovada", "revisar", "rejeitar")
 
 
+# Classificação de cada métrica Wavelet, com a mesma regra do filtro de brilho:
+# a diferença sintética − original, medida em IQR daquela métrica entre as CTs
+# reais de referência. Até 1 IQR, a mudança cabe na diferença entre dois
+# pulmões reais (aprovada); entre 1 e 2, revisão; acima de 2, reprovada.
+# Vale só para a leitura de textura: o veredito final continua mandando
+# textura para revisão, nunca para rejeição direta.
+WAVELET_METRICS = {"fine": "Wavelet 2 px (textura fina)", "coarse": "Wavelet 4 px (textura grossa)", "entropy": "Wavelet entropia"}
+METRIC_STATUSES = ("aprovada", "revisão", "reprovada")
+
+
+def metric_status(z: float) -> str:
+    return "reprovada" if abs(z) > 2 else "revisão" if abs(z) > 1 else "aprovada"
+
+
+def wavelet_metric_columns(real: dict, synthetic: dict, iqr: dict) -> dict:
+    """Valores, diferença em IQR e classificação de cada métrica Wavelet, mais a pior delas."""
+    out = {}
+    for key in WAVELET_METRICS:
+        z = (synthetic[key] - real[key]) / max(iqr[key], 1e-12)
+        out.update({f"wavelet_{key}_real": real[key], f"wavelet_{key}_synthetic": synthetic[key], f"wavelet_{key}_z": z, f"wavelet_{key}_status": metric_status(z)})
+    out["wavelet_status"] = max((out[f"wavelet_{key}_status"] for key in WAVELET_METRICS), key=METRIC_STATUSES.index)
+    return out
+
+
 def _inside(value: float) -> bool:
     return TEXTURE_RANGE[0] <= value <= TEXTURE_RANGE[1]
 
