@@ -1,8 +1,12 @@
-from,to,indicator,gain,ci_low,ci_high,result
-Dgen,Dsr,wavelet_fine_pct,5.109453745314113,-3.5206925713647266,13.261727757738996,sem diferença clara
-Dgen,Dsr,wavelet_coarse_pct,11.322260760796198,7.09969065261933,18.65378780536974,melhorou
-Dgen,Dsr,wavelet_ratio,-0.09181993091623308,-0.11140586082236381,-0.031901222201470736,piorou
-Dgen,Dsr,glcm_contrast_pct,4.218963869667149,-1.8861446250797727,11.141981788037427,sem diferença clara
-Dgen,Dsr,abs_delta_mu,0.09479859490082856,0.01525363232232374,0.2773466411952493,melhorou
-Dgen,Dsr,aprovada,10.81081081081081,2.7027027027027026,21.62162162162162,melhorou
-Dgen,Dsr,brilho,37.83783783783784,18.91891891891892,56.75675675675676,melhorou
+from,to,group,indicator,gain,ci_low,ci_high,result
+Dgen,Dsr,final,aprovada,10.81081081081081,2.7027027027027026,21.62162162162162,melhorou
+Dgen,Dsr,brilho,abs_delta_mu,0.09479859490082856,0.01525363232232374,0.2773466411952493,melhorou
+Dgen,Dsr,brilho,brilho,37.83783783783784,18.91891891891892,56.75675675675676,melhorou
+Dgen,Dsr,brilho,map_area_brilho_local_pct,nan,nan,nan,n/a
+Dgen,Dsr,textura,wavelet_fine_pct,5.109453745314113,-3.5206925713647266,13.261727757738996,sem diferença clara
+Dgen,Dsr,textura,wavelet_coarse_pct,11.322260760796198,7.09969065261933,18.65378780536974,melhorou
+Dgen,Dsr,textura,wavelet_ratio,-0.09181993091623308,-0.11140586082236381,-0.06065157036399118,piorou
+Dgen,Dsr,textura,glcm_contrast_pct,4.218963869667149,-1.8861446250797727,11.141981788037427,sem diferença clara
+Dgen,Dsr,textura,textura,0.0,-16.216216216216218,16.216216216216218,sem diferença clara
+Dgen,Dsr,textura,map_area_textura_alterada_pct,nan,nan,nan,n/a
+Dgen,Dsr,textura,map_corr_textura,nan,nan,nan,n/a

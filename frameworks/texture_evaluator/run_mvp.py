@@ -14,6 +14,7 @@ from wavelet.src.wavelet_features_fullimage import wavelet_energy_entropy_fullim
 from wavelet.src.wavelet_brightness import ll_mean
 from frameworks.texture_evaluator.glcm.src import RobustScale, calibrate_robust_scale, extract_glcm
 from frameworks.texture_evaluator.decision import decide
+from frameworks.texture_evaluator.regional import apply_pair_check, calibrate_maps, pair_correlation, regional, regional_columns
 from frameworks.texture_evaluator.report import generate_report
 
 def calibrate(valid) -> SimpleNamespace:
@@ -26,16 +27,17 @@ def calibrate(valid) -> SimpleNamespace:
     # a densidade continua na faixa P1–P99, que é a definição de "fora da faixa real"
     ruler = {'p1': scale.clip_low, 'p99': scale.clip_high}
     means = np.array([c.original[c.lung_mask].mean() for c in valid]); mean_iqr = float(np.diff(np.percentile(means, [25, 75]))[0])
-    return SimpleNamespace(scale=scale, interval=interval, limits=limits, ruler=ruler, mean_iqr=mean_iqr, settings=SimpleNamespace(wavelet='haar', min_tissue=.9))
+    return SimpleNamespace(scale=scale, interval=interval, limits=limits, ruler=ruler, mean_iqr=mean_iqr, settings=SimpleNamespace(wavelet='haar', min_tissue=.9),
+                           maps=calibrate_maps(valid, ruler, interval, limits))
 
 def context_to_dict(ctx) -> dict:
     """Réguas e limites em JSON, para reaplicar a mesma calibração mais tarde."""
-    return {'glcm_scale': ctx.scale.as_dict(), 'density_interval': ctx.interval, 'density_limits': ctx.limits, 'mean_iqr': ctx.mean_iqr}
+    return {'glcm_scale': ctx.scale.as_dict(), 'density_interval': ctx.interval, 'density_limits': ctx.limits, 'mean_iqr': ctx.mean_iqr, 'maps': ctx.maps}
 
 def context_from_dict(data: dict) -> SimpleNamespace:
     scale = RobustScale(**data['glcm_scale'])
     return SimpleNamespace(scale=scale, interval=data['density_interval'], limits=data['density_limits'], ruler={'p1': scale.clip_low, 'p99': scale.clip_high},
-                           mean_iqr=data['mean_iqr'], settings=SimpleNamespace(wavelet='haar', min_tissue=.9))
+                           mean_iqr=data['mean_iqr'], settings=SimpleNamespace(wavelet='haar', min_tissue=.9), maps=data['maps'])
 
 def evaluate_pair(case_id, original, synthetic, mask, ctx) -> dict:
     """Mede brilho, GLCM e Wavelet de um par e devolve a linha com a decisão final na frente."""
@@ -56,7 +58,8 @@ def evaluate_pair(case_id, original, synthetic, mask, ctx) -> dict:
          'wavelet_energy_real':real_w['energy'],'wavelet_energy_synthetic':syn_w['energy'],
          'wavelet_entropy_real':real_w['entropy'],'wavelet_entropy_synthetic':syn_w['entropy'],
          'wavelet_ll_real':ll_mean(original,mask,ruler['p1'],ruler['p99'],'haar',2,.9),
-         'wavelet_ll_synthetic':ll_mean(synthetic,mask,ruler['p1'],ruler['p99'],'haar',2,.9)}
+         'wavelet_ll_synthetic':ll_mean(synthetic,mask,ruler['p1'],ruler['p99'],'haar',2,.9),
+         'pair_correlation':pair_correlation(original,synthetic,mask), **regional_columns(regional(original,synthetic,mask,ctx)[2])}
     # decisão final na frente da tabela: veredito, motivos e depois as medidas
     return {'case_id': case_id, **decide(row), **row}
 
@@ -75,7 +78,9 @@ def main() -> None:
     ctx = calibrate(valid); scale, interval, limits = ctx.scale, ctx.interval, ctx.limits
     rows=[]; previews=a.output_dir/"previews"; previews.mkdir(parents=True, exist_ok=True)
     for n, c in enumerate(valid):
-        row = evaluate_pair(c.paths.case_id, c.original, c.synthetic, c.lung_mask, ctx); rows.append(row)
+        rows.append(evaluate_pair(c.paths.case_id, c.original, c.synthetic, c.lung_mask, ctx))
+    apply_pair_check(rows)
+    for n, (c, row) in enumerate(zip(valid, rows)):
         status, delta, sat = row['brightness_status'], row['delta_mu'], row['sat31_pct']
         if a.preview_limit < 0 or n<a.preview_limit:
             fig,ax=plt.subplots(1,3,figsize=(12,4))

@@ -21,7 +21,14 @@
       "frac_dark": 0.005289776539195953,
       "lung_median": 0.146634625327029
     },
-    "mean_iqr": 0.3144929263545354
+    "mean_iqr": 0.3144929263545354,
+    "maps": {
+      "floor": {
+        "fine": 0.00024651406250969006,
+        "coarse": 0.0013729355982523951
+      },
+      "bright_shift": 0.1089285778523714
+    }
   },
   "originals": {
     "1.000000-P4P100S300I00003 Gated 0.0A-29193-1-058": "5aa2604852bb2105d8adc33481cbcbb263126b3f",
@@ -67,15 +74,19 @@
       "name": "Dgen",
       "folder": "dados/Dgen",
       "mask_dir": "dados/Dgen",
-      "added": "2026-10-15T21:54:07",
-      "n_cases": 37
+      "added": "2026-10-15T22:08:27",
+      "n_cases": 37,
+      "mode": "só máscara",
+      "suspicious_pairs": 0
     },
     {
       "name": "Dsr",
       "folder": "dados/Dsr",
       "mask_dir": "dados/Dgen",
-      "added": "2026-10-15T21:54:09",
-      "n_cases": 37
+      "added": "2026-10-15T22:08:29",
+      "n_cases": 37,
+      "mode": "mesma anatomia",
+      "suspicious_pairs": 0
     }
   ]
 }

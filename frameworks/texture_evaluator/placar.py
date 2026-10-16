@@ -1,4 +1,4 @@
-"""Placar por versão do gerador: a textura melhorou de uma iteração para a outra?
+"""Placar por versão do gerador: brilho e textura melhoraram de uma iteração para a outra?
 
 Cada versão é uma pasta com as sintéticas que uma iteração do modelo gerou a
 partir das **mesmas originais** (mesmos nomes de arquivo). O placar guarda um
@@ -9,13 +9,16 @@ podem ser adicionadas a qualquer momento.
    originais dela e guardadas no histórico. Toda versão seguinte é medida com
    essas mesmas réguas, e as originais dela precisam ser idênticas às da
    referência — senão os números não se comparam.
-2. O placar usa só os cortes válidos em todas as versões do histórico.
-3. Cada indicador sai como mediana entre os cortes, com intervalo de 95% por
-   bootstrap.
-4. Cada versão é comparada com a anterior, corte a corte: o indicador chegou
+2. Cada par é conferido (`regional.py`): o modo da versão (mesma anatomia ou só
+   máscara) é detectado e, no modo mesma anatomia, pares com correlação baixa
+   com a original são rejeitados como suspeitos de arquivo trocado.
+3. O placar usa só os cortes válidos em todas as versões do histórico e separa
+   os indicadores em três grupos: veredito final, brilho e textura.
+4. Cada indicador sai como mediana entre os cortes (ou % dos cortes), com
+   intervalo de 95% por bootstrap.
+5. Cada versão é comparada com a anterior, corte a corte: o indicador chegou
    mais perto do ideal? Só diz "melhorou" ou "piorou" quando o intervalo da
-   diferença não cruza o zero e a mudança passa do mínimo relevante
-   (`MIN_CHANGE`).
+   diferença não cruza o zero e a mudança passa do mínimo relevante.
 
 Uso (adiciona versões ao histórico e regera o placar; versões já avaliadas não
 são recalculadas):
@@ -37,32 +40,54 @@ import re
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Callable, NamedTuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Patch
 
 from wavelet.src.load_data import CasePaths, discover_cases
+from wavelet.src.mapa_regioes import VERDICT_COLORS, VERDICTS, draw_row
 from wavelet.src.run_pipeline import write_csv
 from wavelet.src.validate_cases import ValidCase, validate_case
+from frameworks.texture_evaluator.regional import MASK_ONLY, apply_pair_check, regional
 from frameworks.texture_evaluator.run_mvp import calibrate, context_from_dict, context_to_dict, evaluate_pair
 
 BOOTSTRAP = 2000
 HISTORY_FILE = "historico.json"
-# (coluna, nome, ideal, unidade): o ideal é a sintética igual à original
+GROUPS = {"final": "Veredito final", "brilho": "Brilho", "textura": "Textura"}
+
+
+class Indicator(NamedTuple):
+    key: str
+    label: str
+    group: str
+    ideal: float
+    unit: str
+    # menor mudança que conta como real (exploratório): abaixo disso, mesmo que
+    # o intervalo não cruze o zero, o placar diz "mudança pequena"
+    min_change: float
+    # None: mediana da coluna `key`; função: % dos cortes em que ela é verdadeira
+    test: Callable[[dict], bool] | None = None
+
+
+# o ideal é a sintética igual à original
 INDICATORS = (
-    ("wavelet_fine_pct", "Detalhe fino (Wavelet)", 100.0, "% da original"),
-    ("wavelet_coarse_pct", "Detalhe grosso (Wavelet)", 100.0, "% da original"),
-    ("wavelet_ratio", "Razão fino/grosso", 1.0, "1 = sem borrar nem ruído"),
-    ("glcm_contrast_pct", "Contraste GLCM", 100.0, "% da original"),
-    ("abs_delta_mu", "|Δμ| (desvio de brilho)", 0.0, "|sintética − original|"),
+    Indicator("aprovada", "Aprovadas", "final", 100.0, "% dos cortes", 5.0, lambda row: row["final_status"] == "aprovada"),
+    Indicator("abs_delta_mu", "|Δμ| (desvio de brilho)", "brilho", 0.0, "|sintética − original|", .05),
+    Indicator("brilho", "Brilho sinalizado", "brilho", 0.0, "% dos cortes", 5.0, lambda row: row["brightness_status"] != "approved" or row["density_status"] != "ok"),
+    Indicator("map_area_brilho_local_pct", "Área com brilho local alterado", "brilho", 0.0, "% do pulmão", 5.0),
+    Indicator("wavelet_fine_pct", "Detalhe fino (Wavelet)", "textura", 100.0, "% da original", 5.0),
+    Indicator("wavelet_coarse_pct", "Detalhe grosso (Wavelet)", "textura", 100.0, "% da original", 5.0),
+    Indicator("wavelet_ratio", "Razão fino/grosso", "textura", 1.0, "1 = sem borrar nem ruído", .05),
+    Indicator("glcm_contrast_pct", "Contraste GLCM", "textura", 100.0, "% da original", 5.0),
+    Indicator("textura", "Textura alterada", "textura", 0.0, "% dos cortes", 5.0, lambda row: row["wavelet_verdict"] != "textura preservada"),
+    Indicator("map_area_textura_alterada_pct", "Área com textura alterada", "textura", 0.0, "% do pulmão", 5.0),
+    Indicator("map_corr_textura", "Correlação espacial da textura", "textura", 1.0, "1 = textura nos mesmos lugares", .05),
 )
-RATES = (
-    ("aprovada", "Aprovadas", 100.0, lambda row: row["final_status"] == "aprovada"),
-    ("brilho", "Brilho sinalizado", 0.0, lambda row: row["brightness_status"] != "approved" or row["density_status"] != "ok"),
-)
-# menor mudança que conta como real (exploratório): abaixo disso, mesmo que o
-# intervalo não cruze o zero, o placar diz "mudança pequena"
-MIN_CHANGE = {"wavelet_fine_pct": 5.0, "wavelet_coarse_pct": 5.0, "wavelet_ratio": .05, "glcm_contrast_pct": 5.0, "abs_delta_mu": .05, "aprovada": 5.0, "brilho": 5.0}
+DECIMALS = {"wavelet_ratio": 2, "map_corr_textura": 2, "abs_delta_mu": 3}
+FILTER_TEXT = {"approved": "filtro: aprovado", "manual_review": "filtro: revisão", "hard_reject": "filtro: rejeição"}
+DENSITY_TEXT = {"ok": "densidade: ok", "brighter": "densidade: clareou", "darker": "densidade: escureceu", "too_bright": "densidade: claro demais", "too_dark": "densidade: escuro demais"}
 
 
 class PlacarError(Exception):
@@ -89,11 +114,16 @@ def load_rows(folder: Path, name: str) -> list[dict]:
         return list(csv.DictReader(handle))
 
 
+def case_paths(folder: Path, mask_dir: Path | None) -> list[CasePaths]:
+    paths = discover_cases(folder)
+    if mask_dir:
+        paths = [CasePaths(p.case_id, p.original, p.synthetic, mask_dir / f"{p.case_id}_mask.tiff") for p in paths]
+    return paths
+
+
 def load_valid(folder: Path, mask_dir: Path | None) -> dict[str, ValidCase]:
     valid = {}
-    for paths in discover_cases(folder):
-        if mask_dir:
-            paths = CasePaths(paths.case_id, paths.original, paths.synthetic, mask_dir / f"{paths.case_id}_mask.tiff")
+    for paths in case_paths(folder, mask_dir):
         result = validate_case(paths, erosion_radius=2)
         if isinstance(result, ValidCase):
             valid[paths.case_id] = result
@@ -112,6 +142,8 @@ def add_version(history_dir: Path, name: str, folder: Path, mask_dir: Path | Non
     if not folder.is_dir():
         raise PlacarError(f"pasta de versão não encontrada: {folder}\nela deve conter as originais e as sintéticas (_generate)")
     history = load_history(history_dir)
+    if history and "maps" not in history["calibration"]:
+        raise PlacarError(f"o histórico em {history_dir} foi criado por uma versão antiga do placar (sem mapa por região); apague a pasta e adicione as versões de novo")
     if history and any(version["name"] == name for version in history["versions"]):
         raise PlacarError(f"já existe uma versão chamada {name!r} no histórico")
     mask_dir = Path(mask_dir) if mask_dir else (Path(history["mask_dir"]) if history and history["mask_dir"] else None)
@@ -143,12 +175,17 @@ def add_version(history_dir: Path, name: str, folder: Path, mask_dir: Path | Non
     for case in cases:
         row = evaluate_pair(case, valid[case].original, valid[case].synthetic, valid[case].lung_mask, ctx)
         rows.append({**row, "abs_delta_mu": abs(row["delta_mu"])})
+    mode = apply_pair_check(rows)
+    suspicious = sum(row["pair_status"] == "suspeito" for row in rows)
     history_dir.mkdir(parents=True, exist_ok=True)
     rows_path(history_dir, name).parent.mkdir(exist_ok=True)
     write_csv(rows_path(history_dir, name), rows)
-    history["versions"].append({"name": name, "folder": str(folder), "mask_dir": str(mask_dir) if mask_dir else None, "added": datetime.now().isoformat(timespec="seconds"), "n_cases": len(rows)})
+    history["versions"].append({
+        "name": name, "folder": str(folder), "mask_dir": str(mask_dir) if mask_dir else None,
+        "added": datetime.now().isoformat(timespec="seconds"), "n_cases": len(rows), "mode": mode, "suspicious_pairs": suspicious,
+    })
     save_history(history_dir, history)
-    return f"{name}: {len(rows)} cortes avaliados"
+    return f"{name}: {len(rows)} cortes avaliados · modo {mode}" + (f" · {suspicious} pares suspeitos" if suspicious else "")
 
 
 def remove_version(history_dir: Path, name: str) -> None:
@@ -164,49 +201,83 @@ def remove_version(history_dir: Path, name: str) -> None:
 # ---------------------------------------------------------------- placar
 
 def bootstrap(values: np.ndarray, statistic, rng) -> tuple[float, float, float]:
-    """Estatística e intervalo de 95% reamostrando os cortes."""
+    """Estatística e intervalo de 95% reamostrando os cortes; sem valores, devolve vazio."""
+    if len(values) == 0:
+        return (float("nan"),) * 3
     samples = [statistic(values[rng.integers(0, len(values), len(values))]) for _ in range(BOOTSTRAP)]
     low, high = np.percentile(samples, (2.5, 97.5))
     return float(statistic(values)), float(low), float(high)
 
 
-def change_label(gain: float, low: float, high: float, key: str) -> str:
+def change_label(gain: float, low: float, high: float, indicator: Indicator) -> str:
+    if not np.isfinite(gain):
+        return "n/a"
     if low <= 0 <= high:
         return "sem diferença clara"
-    if abs(gain) < MIN_CHANGE[key]:
+    if abs(gain) < indicator.min_change:
         return "mudança pequena"
     return "melhorou" if gain > 0 else "piorou"
 
 
+def trusted(row: dict) -> bool:
+    """Par suspeito (arquivo trocado?) só conta no veredito final; brilho e textura dele não valem nada."""
+    return row.get("pair_status") != "suspeito"
+
+
+def values(rows: list[dict], indicator: Indicator) -> np.ndarray:
+    if indicator.group != "final":
+        rows = [row for row in rows if trusted(row)]
+    if indicator.test:
+        return np.array([indicator.test(row) for row in rows], dtype=float)
+    out = np.array([float(row[indicator.key]) for row in rows])
+    # colunas do mapa ficam vazias no modo só máscara
+    return out[np.isfinite(out)]
+
+
 def score(rows: list[dict], rng) -> dict:
     out = {}
-    for key, *_ in INDICATORS:
-        out[key] = bootstrap(np.array([float(row[key]) for row in rows]), np.median, rng)
-    for key, _, _, test in RATES:
-        out[key] = tuple(100 * value for value in bootstrap(np.array([test(row) for row in rows], dtype=float), np.mean, rng))
+    for indicator in INDICATORS:
+        if indicator.test:
+            out[indicator.key] = tuple(100 * value for value in bootstrap(values(rows, indicator), np.mean, rng))
+        else:
+            out[indicator.key] = bootstrap(values(rows, indicator), np.median, rng)
     return out
 
 
 def compare(previous: list[dict], current: list[dict], rng) -> dict:
     """Mudança corte a corte; positivo = a versão nova está mais perto do ideal."""
     out = {}
-    for key, _, ideal, _ in INDICATORS:
-        gain = np.array([abs(float(a[key]) - ideal) - abs(float(b[key]) - ideal) for a, b in zip(previous, current)])
-        out[key] = bootstrap(gain, np.median, rng)
-    for key, _, _, test in RATES:
-        sign = 1 if key == "aprovada" else -1  # mais aprovadas é melhor; mais brilho sinalizado é pior
-        gain = np.array([sign * (float(test(b)) - float(test(a))) for a, b in zip(previous, current)])
-        out[key] = tuple(100 * value for value in bootstrap(gain, np.mean, rng))
+    every = list(zip(previous, current))
+    reliable = [(a, b) for a, b in every if trusted(a) and trusted(b)]
+    for indicator in INDICATORS:
+        pairs_ = every if indicator.group == "final" else reliable
+        if indicator.test:
+            sign = 1 if indicator.ideal else -1  # ideal 100%: mais é melhor; ideal 0%: menos é melhor
+            gain = np.array([sign * (float(indicator.test(b)) - float(indicator.test(a))) for a, b in pairs_])
+            out[indicator.key] = tuple(100 * value for value in bootstrap(gain, np.mean, rng))
+            continue
+        pairs = [(float(a[indicator.key]), float(b[indicator.key])) for a, b in pairs_]
+        gain = np.array([abs(x - indicator.ideal) - abs(y - indicator.ideal) for x, y in pairs if np.isfinite(x) and np.isfinite(y)])
+        out[indicator.key] = bootstrap(gain, np.median, rng)
     return out
 
 
 def verdict_label(row: dict) -> str:
-    """Veredito final com o motivo principal: brilho rejeita sozinho; em revisão, mostra o tipo de defeito."""
+    """Veredito final com o motivo principal: par suspeito e brilho rejeitam; em revisão, mostra o tipo de defeito."""
+    if row.get("pair_status") == "suspeito":
+        return "rejeitar: par suspeito"
     if row["final_status"] == "rejeitar":
         return "rejeitar: brilho"
     if row["final_status"] == "revisar":
         return "revisar: só brilho" if row["wavelet_verdict"] == "textura preservada" else f"revisar: {row['wavelet_verdict']}"
     return "aprovada"
+
+
+COUNTS = {
+    "final": lambda row: [verdict_label(row)],
+    "brilho": lambda row: [FILTER_TEXT[row["brightness_status"]], DENSITY_TEXT[row["density_status"]]],
+    "textura": lambda row: [row["wavelet_verdict"]],
+}
 
 
 def build_board(history_dir: Path) -> dict | None:
@@ -226,54 +297,93 @@ def build_board(history_dir: Path) -> dict | None:
         "dropped": sorted(set.union(*(set(r) for r in all_rows.values())) - set(common)),
         "scores": {name: score(rows[name], rng) for name in names},
         "comparisons": {(a, b): compare(rows[a], rows[b], rng) for a, b in zip(names, names[1:])},
-        "verdicts": {name: Counter(verdict_label(row) for row in rows[name]) for name in names},
+        "counts": {group: {name: Counter(label for row in rows[name] if group == "final" or trusted(row) for label in count(row)) for name in names} for group, count in COUNTS.items()},
     }
+
+
+def case_map(history_dir: Path, version: str, case_id: str):
+    """Figura do mapa por região de um corte: original, sintética, brilho e textura por bloco."""
+    history = load_history(history_dir)
+    entry = next(v for v in history["versions"] if v["name"] == version)
+    if entry.get("mode") == MASK_ONLY:
+        raise PlacarError(f"{version} está no modo só máscara: a sintética não tem a mesma anatomia da original, então o mapa por região não se aplica")
+    paths = next((p for p in case_paths(Path(entry["folder"]), Path(entry["mask_dir"]) if entry["mask_dir"] else None) if p.case_id == case_id), None)
+    if paths is None:
+        raise PlacarError(f"{case_id} não encontrado em {entry['folder']}")
+    case = validate_case(paths, erosion_radius=2)
+    if not isinstance(case, ValidCase):
+        raise PlacarError(f"{case_id}: {case.reason}")
+    ctx = context_from_dict(history["calibration"])
+    readings, lung, stats = regional(case.original, case.synthetic, case.lung_mask, ctx)
+    fig, axes = plt.subplots(2, 2, figsize=(10, 9.5))
+    draw_row(axes.ravel(), f"Sintética ({version})", case, case.synthetic, readings, lung, ctx.interval, 16, stats)
+    handles = [Patch(color=color, label=name) for name, color in zip(VERDICTS, VERDICT_COLORS)]
+    handles += [Patch(color="#d6604d", label="brilho: mais claro"), Patch(color="#4393c3", label="brilho: mais escuro")]
+    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=8, frameon=False)
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    return fig
 
 
 # ---------------------------------------------------------------- saída
 
-def fmt(value: float, key: str) -> str:
-    if key == "wavelet_ratio":
-        return f"{value:.2f}"
-    if key == "abs_delta_mu":
-        return f"{value:.3f}"
+def fmt(value: float, indicator: Indicator) -> str:
+    if not np.isfinite(value):
+        return "n/a"
+    if indicator.key in DECIMALS:
+        return f"{value:.{DECIMALS[indicator.key]}f}"
     return f"{value:.0f}%"
 
 
-def fmt_gain(gain: float, key: str) -> str:
-    # razão e |Δμ| na própria unidade; porcentagens e taxas em pontos percentuais
-    return f"{gain:+.2f}" if key in ("wavelet_ratio", "abs_delta_mu") else f"{gain:+.1f} pp"
+def fmt_gain(gain: float, indicator: Indicator) -> str:
+    # razão, correlação e |Δμ| na própria unidade; porcentagens e taxas em pontos percentuais
+    return f"{gain:+.{DECIMALS[indicator.key]}f}" if indicator.key in DECIMALS else f"{gain:+.1f} pp"
 
 
-def all_indicators():
-    """(chave, nome, ideal, unidade) dos indicadores e das taxas, na ordem do placar."""
-    return [(key, label, ideal, unit) for key, label, ideal, unit in INDICATORS] + [(key, label, ideal, "% dos cortes") for key, label, ideal, _ in RATES]
+def group_indicators(group: str) -> list[Indicator]:
+    return [indicator for indicator in INDICATORS if indicator.group == group]
 
 
-def score_table(board: dict) -> list[list[str]]:
+def score_table(board: dict, group: str) -> list[list[str]]:
     """Linhas [indicador, ideal, versão 1, versão 2, ...] com mediana e intervalo."""
     table = []
-    for key, label, ideal, unit in all_indicators():
-        cells = [f"{fmt(v, key)} [{fmt(lo, key)}, {fmt(hi, key)}]" for v, lo, hi in (board["scores"][name][key] for name in board["names"])]
-        table.append([f"{label} ({unit})", fmt(ideal, key)] + cells)
+    for indicator in group_indicators(group):
+        cells = []
+        for name in board["names"]:
+            value, low, high = board["scores"][name][indicator.key]
+            cells.append(f"{fmt(value, indicator)} [{fmt(low, indicator)}, {fmt(high, indicator)}]" if np.isfinite(value) else "n/a")
+        table.append([f"{indicator.label} ({indicator.unit})", fmt(indicator.ideal, indicator)] + cells)
     return table
 
 
-def change_table(board: dict) -> list[list[str]]:
+def change_table(board: dict, group: str) -> list[list[str]]:
     table = []
-    for key, label, *_ in all_indicators():
+    for indicator in group_indicators(group):
         cells = []
         for pair in board["comparisons"]:
-            gain, low, high = board["comparisons"][pair][key]
-            cells.append(f"{change_label(gain, low, high, key)} ({fmt_gain(gain, key)})")
-        table.append([label] + cells)
+            gain, low, high = board["comparisons"][pair][indicator.key]
+            label = change_label(gain, low, high, indicator)
+            cells.append(label if label == "n/a" else f"{label} ({fmt_gain(gain, indicator)})")
+        table.append([indicator.label] + cells)
     return table
 
 
-def verdict_table(board: dict) -> list[list[str]]:
-    verdicts = board["verdicts"]
-    labels = sorted({label for counts in verdicts.values() for label in counts}, key=lambda label: -sum(counts.get(label, 0) for counts in verdicts.values()))
-    return [[label] + [str(verdicts[name].get(label, 0)) for name in board["names"]] for label in labels]
+def count_table(board: dict, group: str) -> list[list[str]]:
+    counts = board["counts"][group]
+    labels = sorted({label for c in counts.values() for label in c}, key=lambda label: (label.split(":")[0], -sum(c.get(label, 0) for c in counts.values())))
+    return [[label] + [str(counts[name].get(label, 0)) for name in board["names"]] for label in labels]
+
+
+def version_table(board: dict) -> list[list[str]]:
+    return [[v["name"], v["folder"], v.get("mode", "?"), str(v.get("suspicious_pairs", "?")), v["added"].replace("T", " "), str(v["n_cases"])] for v in board["history"]["versions"]]
+
+
+VERSION_HEADER = ["Versão", "Pasta", "Modo", "Pares suspeitos", "Adicionada em", "Cortes válidos"]
+CHANGE_NOTE = (
+    "Ganho = quanto, corte a corte, a versão nova chegou mais perto do ideal (mediana; em taxas, pontos percentuais). "
+    "\"melhorou\" ou \"piorou\" só quando o intervalo de 95% não cruza o zero e a mudança passa do mínimo relevante "
+    "(5 pp nas porcentagens e taxas; 0,05 na razão, na correlação e no |Δμ|); fora do zero mas abaixo do mínimo: \"mudança pequena\". "
+    "n/a: indicador do mapa em versão no modo só máscara."
+)
 
 
 def markdown_table(header: list[str], rows: list[list[str]]) -> list[str]:
@@ -285,33 +395,29 @@ def markdown_table(header: list[str], rows: list[list[str]]) -> list[str]:
 
 def write_markdown(board: dict, output: Path) -> None:
     names = board["names"]
+    pairs = [f"{a} → {b}" for a, b in board["comparisons"]]
     lines = [
         "# Placar por versão", "",
         f"{board['n_cases']} cortes avaliados em todas as versões. Réguas calibradas nas originais de `{board['history']['reference']}`.",
-        "Valor = mediana entre os cortes; entre colchetes, intervalo de 95% (bootstrap).", "",
-        "## Indicadores", "", *markdown_table(["Indicador", "Ideal", *names], score_table(board)),
-        "", "## Vereditos", "", *markdown_table(["Veredito", *names], verdict_table(board)),
+        "Valor = mediana entre os cortes (ou % dos cortes); entre colchetes, intervalo de 95% (bootstrap).", "",
+        "## Versões", "", *markdown_table(VERSION_HEADER, version_table(board)),
     ]
-    if board["comparisons"]:
-        lines += [
-            "", "## Comparação com a versão anterior", "",
-            "Ganho = quanto, corte a corte, a versão nova chegou mais perto do ideal (mediana; em taxas, pontos percentuais).",
-            "Só é \"melhorou\" ou \"piorou\" quando o intervalo de 95% não cruza o zero **e** a mudança passa do mínimo relevante",
-            "(5 pp nas porcentagens e taxas, 0,05 na razão e no |Δμ|); se só a primeira condição vale, aparece \"mudança pequena\".", "",
-            *markdown_table(["Indicador", *(f"{a} → {b}" for a, b in board["comparisons"])], change_table(board)),
-        ]
-    lines += ["", "## Versões", "", *markdown_table(["Versão", "Pasta", "Adicionada em", "Cortes válidos"], [
-        [v["name"], f"`{v['folder']}`", v["added"], str(v["n_cases"])] for v in board["history"]["versions"]
-    ])]
+    for group, title in GROUPS.items():
+        lines += ["", f"## {title}", "", *markdown_table(["Indicador", "Ideal", *names], score_table(board, group))]
+        if pairs:
+            lines += ["", *markdown_table(["Mudança", *pairs], change_table(board, group))]
+        lines += ["", *markdown_table(["Contagem de cortes", *names], count_table(board, group))]
+    if pairs:
+        lines += ["", CHANGE_NOTE]
     if board["dropped"]:
         lines += ["", f"{len(board['dropped'])} cortes ficaram fora do placar por não serem válidos em todas as versões."]
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def figure(board: dict):
+def figure(board: dict, group: str | None = None):
     """Um painel por indicador ao longo das versões, em preto e branco."""
     names = board["names"]
-    panels = all_indicators()
+    panels = group_indicators(group) if group else list(INDICATORS)
     columns = 4
     rows = -(-len(panels) // columns)
     fig, axes = plt.subplots(rows, columns, figsize=(3.2 * columns, 2.9 * rows), squeeze=False)
@@ -319,12 +425,12 @@ def figure(board: dict):
     for axis in axes[len(panels):]:
         axis.axis("off")
     x = np.arange(len(names))
-    for axis, (key, label, ideal, unit) in zip(axes, panels):
-        values = np.array([board["scores"][name][key] for name in names])
-        axis.errorbar(x, values[:, 0], yerr=[values[:, 0] - values[:, 1], values[:, 2] - values[:, 0]], fmt="o-", color="black", capsize=3, linewidth=1, markersize=4)
-        axis.axhline(ideal, color="black", linestyle=":", linewidth=.8)
+    for axis, indicator in zip(axes, panels):
+        data = np.array([board["scores"][name][indicator.key] for name in names])
+        axis.errorbar(x, data[:, 0], yerr=[data[:, 0] - data[:, 1], data[:, 2] - data[:, 0]], fmt="o-", color="black", capsize=3, linewidth=1, markersize=4)
+        axis.axhline(indicator.ideal, color="black", linestyle=":", linewidth=.8)
         axis.set_xticks(x, names, fontsize=8, rotation=30 if len(names) > 3 else 0)
-        axis.set_title(f"{label}\n{unit}", fontsize=8)
+        axis.set_title(f"{indicator.label}\n{indicator.unit}" if group else f"{GROUPS[indicator.group]} · {indicator.label}\n{indicator.unit}", fontsize=8)
         axis.tick_params(labelsize=8)
         axis.set_xlim(-.4, len(names) - .6)
     fig.tight_layout()
@@ -333,14 +439,15 @@ def figure(board: dict):
 
 def write_outputs(history_dir: Path, board: dict) -> None:
     names = board["names"]
+    by_key = {indicator.key: indicator for indicator in INDICATORS}
     write_csv(history_dir / "por_caso.csv", [{"version": name, **row} for name in names for row in board["rows"][name]])
     write_csv(history_dir / "placar.csv", [
-        {"version": name, "indicator": key, "value": v, "ci_low": lo, "ci_high": hi}
+        {"version": name, "group": by_key[key].group, "indicator": key, "value": v, "ci_low": lo, "ci_high": hi}
         for name in names for key, (v, lo, hi) in board["scores"][name].items()
     ])
     write_csv(history_dir / "comparacao.csv", [
-        {"from": a, "to": b, "indicator": key, "gain": g, "ci_low": lo, "ci_high": hi, "result": change_label(g, lo, hi, key)}
-        for (a, b), values in board["comparisons"].items() for key, (g, lo, hi) in values.items()
+        {"from": a, "to": b, "group": by_key[key].group, "indicator": key, "gain": g, "ci_low": lo, "ci_high": hi, "result": change_label(g, lo, hi, by_key[key])}
+        for (a, b), values_ in board["comparisons"].items() for key, (g, lo, hi) in values_.items()
     ])
     write_markdown(board, history_dir / "placar.md")
     fig = figure(board)
