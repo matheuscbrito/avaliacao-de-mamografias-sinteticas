@@ -158,6 +158,63 @@ def texture_explanation(row: dict) -> str:
     return text + (f" · leitura exploratória: {verdict}" if verdict and verdict != "textura preservada" else "")
 
 
+STATUS_BOX = {"aprovada": (st.success, ":material/check_circle:"), "revisão": (st.warning, ":material/visibility:"),
+              "reprovada": (st.error, ":material/cancel:"), "inconclusivo": (st.info, ":material/help:")}
+STATUS_MARK = {"aprovada": "✓", "revisão": "!", "reprovada": "✕", "inconclusivo": "?"}
+
+
+def metric_line(row: dict, prefix: str, key: str, label: str) -> str:
+    """Uma métrica em linguagem direta: classificação, diferença em IQR e quanto a sintética vale da real."""
+    z, status = number(row, f"{prefix}_{key}_z"), row[f"{prefix}_{key}_status"]
+    pct = 100 * number(row, f"{prefix}_{key}_synthetic") / number(row, f"{prefix}_{key}_real")
+    return f"{STATUS_MARK[status]} **{label}**: Δ {z:+.1f} IQR → {status} · sintética = {pct:.0f}% da real".replace(".", ",")
+
+
+def technique_why(row: dict, technique: str, reference: dict) -> str:
+    """Por que a técnica chegou à classificação deste corte, citando o limite que foi cruzado."""
+    status = technique_statuses(row)[technique]
+    if technique == "NEx":
+        value, band = number(row, "nex_synthetic"), f"{br(reference['p5'])} a {br(reference['p95'])}"
+        if status == "inconclusivo":
+            return "Poucas janelas de 32 px dentro do pulmão: leitura inconclusiva, não pesa no veredito."
+        side = {"ok": "dentro", "alto": "acima", "baixo": "abaixo"}[row["nex_status"]]
+        return f"NEx da sintética = {br(value)}, {side} da faixa das CTs reais ({band})."
+    prefix, metrics = TECHNIQUE_METRICS[technique]
+    names = [label.removeprefix(technique + " ") for key, label in metrics.items() if row[f"{prefix}_{key}_status"] == status]
+    if status == "aprovada":
+        return "Todas as métricas ficaram dentro de ±1 IQR das CTs reais."
+    joined = " e ".join(names)
+    if status == "revisão":
+        return f"{joined} passou de ±1 IQR, mas ficou dentro de ±2 IQR."
+    return f"{joined} passou de ±2 IQR: fora da variação entre CTs reais."
+
+
+def texture_summary(row: dict) -> str:
+    """Frase do veredito combinado: quem levou o corte a essa classificação."""
+    statuses, verdict = technique_statuses(row), texture_status(row)
+    if verdict == "aprovada":
+        return "GLCM, Wavelet e NEx aprovaram."
+    who = [technique for technique, status in statuses.items() if status == verdict]
+    verb = "reprovou" if verdict == "reprovada" else "pediu revisão"
+    if len(who) > 1:
+        verb = "reprovaram" if verdict == "reprovada" else "pediram revisão"
+    return f"{' e '.join(who)} {verb}. O veredito é sempre o da técnica mais severa."
+
+
+def show_texture_limits(reference: dict):
+    """Régua única dos limites de textura, sempre visível."""
+    nex_band = f"{br(reference['p5'])} a {br(reference['p95'])}"
+    st.markdown(f"""
+| técnica | o que é comparado | ✓ aprovada | ! revisão | ✕ reprovada |
+|---|---|---|---|---|
+| **GLCM** · contraste, energia | Δ = sintética − real, em IQR dessa métrica entre as CTs reais | \\|Δ\\| ≤ 1 IQR | 1 < \\|Δ\\| ≤ 2 IQR | \\|Δ\\| > 2 IQR |
+| **Wavelet** · 2 px, 4 px, entropia | a mesma regra da GLCM | \\|Δ\\| ≤ 1 IQR | 1 < \\|Δ\\| ≤ 2 IQR | \\|Δ\\| > 2 IQR |
+| **NEx** · assinatura espectral | NEx da sintética × faixa P5–P95 das CTs reais | entre {nex_band} | fora da faixa | — (NEx não reprova) |
+| **Veredito de textura** | a técnica mais severa decide | as três aprovaram | alguma pediu revisão | alguma reprovou |
+""")
+    st.caption("Em GLCM e Wavelet, a métrica mais severa decide a técnica. NEx inconclusivo (poucas janelas no pulmão) não pesa. O brilho não entra em nenhuma linha desta régua.")
+
+
 @st.cache_data(show_spinner="Carregando a figura do corte...")
 def technique_png(history_dir: str, stamp: float, case_id: str, technique: str) -> bytes:
     board = build_board(Path(history_dir))
@@ -270,9 +327,9 @@ def selectable_chart(container, chart, key: str) -> str | None:
     camadas ou compostos; nelas o corte continua sendo aberto pela tabela.
     """
     try:
-        event = container.altair_chart(chart, use_container_width=True, on_select="rerun", selection_mode="cut", key=key)
+        event = container.altair_chart(chart, width="stretch", on_select="rerun", selection_mode="cut", key=key)
     except StreamlitAPIException:
-        container.altair_chart(chart, use_container_width=True)
+        container.altair_chart(chart, width="stretch")
         return None
     picked = event.selection.get("cut", [])
     return picked[0].get("case_id") if picked else None
@@ -410,7 +467,7 @@ def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
     return frame
 
 
-def show_method_cards(mode: str):
+def show_method_cards(mode: str, reference: dict):
     if mode == "brilho":
         st.markdown("#### Como o filtro de brilho decide")
         st.write("Cada corte passa por **dois filtros oficiais**. A categoria vem da combinação deles — não de apenas um número.")
@@ -430,30 +487,18 @@ def show_method_cards(mode: str):
         st.error("**Reprovada diretamente** — |Δμ| > 0,629 **ou** Sat31 > 15%.")
         st.info("**Densidade** (pixels fora da faixa P1–P99 real e deslocamento da mediana) e **brilho segundo a Wavelet** (banda LL: média local de 4×4 px, só o brilho, sem a textura) complementam a inspeção. A Wavelet LL é classificada como as métricas de textura: Δ = LL da sintética − LL da original, em IQR da LL entre as CTs reais (até 1 aprovada, 1–2 revisão, acima de 2 reprovada). Nenhuma das duas altera a categoria oficial, que depende apenas de |Δμ| e Sat31.")
     else:
-        st.markdown("#### Técnicas de textura usadas")
-        st.dataframe(pd.DataFrame([
-            ["GLCM · contraste", "quanto o tom muda entre pixels vizinhos; queda sugere suavização/perda de alta frequência"],
-            ["GLCM · energia", "uniformidade dos pares de tons; pode subir quando a imagem fica mais lisa"],
-            ["Wavelet · energia (2 + 4 px)", "quantidade total de detalhe, somando a escala fina (~2 px) e a grossa (~4 px); na tabela, as duas escalas aparecem separadas"],
-            ["Wavelet · entropia", "variação/complexidade da distribuição de detalhes"],
-            ["NEx · assinatura espectral", "excesso ou falta de estrutura perto do limite de resolução; compara a sintética com a faixa P5–P95 das CTs reais"],
-        ], columns=["técnica", "o que ela mede"]), hide_index=True, width="stretch")
-        st.markdown("#### Como a textura é classificada")
-        st.write("**Nesta aba, só a textura decide; o brilho não entra.** Cada técnica dá a sua classificação. O **veredito de textura** é a pior das três.")
-        glcm, wavelet, nex = st.columns(3)
-        with glcm:
-            st.markdown("**GLCM** · contraste e energia")
-            st.caption("Diferença sintética − real de cada métrica, em IQR dessa métrica entre as CTs reais. A pior métrica dá a classificação da GLCM.")
-        with wavelet:
-            st.markdown("**Wavelet** · 2 px, 4 px e entropia")
-            st.caption("A mesma regra da GLCM. O “tipo” (borrou, ruído, perdeu contraste…) descreve a mudança, não decide.")
-        with nex:
-            st.markdown("**NEx** · assinatura espectral")
-            st.caption("NEx da sintética fora da faixa P5–P95 das CTs reais pede revisão. Com poucas janelas na ROI, fica inconclusivo e não pesa.")
-        first, second, third = st.columns(3)
-        first.metric("Aprovada", "|Δ| ≤ 1 IQR", "dentro da variação real")
-        second.metric("Revisão", "1 < |Δ| ≤ 2 IQR", "pede inspeção")
-        third.metric("Reprovada", "|Δ| > 2 IQR", "fora da variação real")
+        st.markdown("#### Limites da textura")
+        st.write("**Nesta aba, só a textura decide; o brilho não entra.** Cada técnica classifica o par sozinha, e o **veredito de textura** é o da mais severa.")
+        show_texture_limits(reference)
+        with st.expander("O que cada técnica mede", expanded=False):
+            st.dataframe(pd.DataFrame([
+                ["GLCM · contraste", "quanto o tom muda entre pixels vizinhos; queda sugere suavização/perda de alta frequência"],
+                ["GLCM · energia", "uniformidade dos pares de tons; pode subir quando a imagem fica mais lisa"],
+                ["Wavelet · 2 px e 4 px", "quantidade de detalhe na escala fina (~2 px) e na grossa (~4 px)"],
+                ["Wavelet · entropia", "variação/complexidade da distribuição de detalhes"],
+                ["Wavelet · tipo", "rótulo descritivo (borrou, ruído, perdeu contraste…); descreve a mudança, não decide"],
+                ["NEx · assinatura espectral", "excesso ou falta de estrutura perto do limite de resolução; compara a sintética com a faixa P5–P95 das CTs reais"],
+            ], columns=["técnica", "o que ela mede"]), hide_index=True, width="stretch")
 
 
 def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, version: str, mode: str):
@@ -461,37 +506,42 @@ def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, versio
     st.markdown("---")
     st.subheader(f"Par em foco · {case_name(case_id)}")
     if mode == "brilho":
-        st.markdown(f"**Gatekeeper oficial: {official_brightness_status(row)}.** {brightness_explanation(row)}")
+        show, icon = STATUS_BOX[{"approved": "aprovada", "manual_review": "revisão", "hard_reject": "reprovada"}[row["brightness_status"]]]
+        show(f"#### Filtro de brilho: {official_brightness_status(row)}\n{brightness_explanation(row)}. Só |Δμ| e Sat31 decidem.", icon=icon)
         st.markdown(f"**Densidade:** {density_reading(row)} · **Brilho segundo a Wavelet (LL):** {metric_reading(row, 'wavelet', 'll')}")
         choices = {"CT real × sintética (Δμ)": "delta_mu", "Densidade · pixels fora da faixa real": "densidade", "Brilho local (Wavelet LL)": "ll"}
     else:
-        verdict, _ = texture_decision(row)
-        st.markdown(f"**Veredito de textura: {verdict}** — a pior classificação entre GLCM, Wavelet e NEx.")
+        reference = board["history"]["calibration"]["nex_reference"]
+        verdict = texture_status(row)
+        show, icon = STATUS_BOX[verdict]
+        show(f"#### Veredito de textura: {TEXTURE_LABEL[verdict]}\n{texture_summary(row)}", icon=icon)
         statuses = technique_statuses(row)
         for column, technique in zip(st.columns(3), TECHNIQUES):
-            box = column.container(border=True)
-            box.markdown(f"**{technique}: {statuses[technique]}**")
-            if technique == "NEx":
-                box.markdown(f"- {nex_reading(row)}")
-            else:
-                prefix, metrics = TECHNIQUE_METRICS[technique]
-                box.markdown("\n".join(f"- {label.removeprefix(technique + ' ')}: {metric_reading(row, prefix, key)}" for key, label in metrics.items()))
-            if technique == "Wavelet":
-                box.caption(f"tipo de mudança (descreve, não decide): {row.get('wavelet_verdict', 'n/a')}")
+            with column:
+                show, icon = STATUS_BOX[statuses[technique]]
+                show(f"**{technique}: {statuses[technique]}**  \n{technique_why(row, technique, reference)}", icon=icon)
+                if technique == "NEx":
+                    st.markdown(f"{STATUS_MARK[statuses['NEx']]} **NEx**: sintética {br(number(row, 'nex_synthetic'))} · real {br(number(row, 'nex_real'))}")
+                else:
+                    prefix, metrics = TECHNIQUE_METRICS[technique]
+                    st.markdown("  \n".join(metric_line(row, prefix, key, label.removeprefix(technique + " ")) for key, label in metrics.items()))
+                if technique == "Wavelet":
+                    st.caption(f"tipo de mudança (descreve, não decide): {row.get('wavelet_verdict', 'n/a')}")
         choices = {"GLCM · contraste": "glcm_contraste", "Wavelet · detalhe fino": "wavelet_fina", "Wavelet · detalhe grosso": "wavelet_grossa"}
-    st.image(raw_pair_png(str(history_dir), stamp, case_id, version), use_container_width=True)
+    st.image(raw_pair_png(str(history_dir), stamp, case_id, version), width="stretch")
     st.caption("CTs brutas lado a lado — sem mapa, máscara ou métrica sobreposta. A mesma janela de visualização é usada nas duas imagens para permitir comparação direta.")
     tones = glcm_tone_counts(str(history_dir), stamp, case_id, version)
-    st.markdown("#### Extremos da discretização GLCM")
-    metrics = st.columns(4)
-    for column, label, key in zip(metrics, ("CT real · tom 0", f"CT real · tom {tones['last_tone']}", "CT sintética · tom 0", f"CT sintética · tom {tones['last_tone']}"), ("real_zero", "real_last", "synthetic_zero", "synthetic_last")):
-        _, pct = tones[key]
-        column.metric(label, f"{pct:.2f}%", "dos pixels da ROI")
-    st.caption(f"A régua oficial discretiza a ROI pulmonar em {tones['last_tone'] + 1} tons. Os cartões mostram a porcentagem no menor tom (0) e no maior tom ({tones['last_tone']}); não contam pares de vizinhos da GLCM.")
+    # na textura os extremos são detalhe técnico; no brilho eles explicam o Sat31
+    with st.expander("Extremos da discretização GLCM", expanded=mode == "brilho"):
+        metrics = st.columns(4)
+        for column, label, key in zip(metrics, ("CT real · tom 0", f"CT real · tom {tones['last_tone']}", "CT sintética · tom 0", f"CT sintética · tom {tones['last_tone']}"), ("real_zero", "real_last", "synthetic_zero", "synthetic_last")):
+            _, pct = tones[key]
+            column.metric(label, f"{pct:.2f}%", "dos pixels da ROI")
+        st.caption(f"A régua oficial discretiza a ROI pulmonar em {tones['last_tone'] + 1} tons. Os cartões mostram a porcentagem no menor tom (0) e no maior tom ({tones['last_tone']}); não contam pares de vizinhos da GLCM.")
     with st.expander("Entender a métrica neste par", expanded=False):
         st.caption("Esta visualização mostra o que a técnica calcula, não a CT bruta acima.")
         technique = st.segmented_control("Técnica", list(choices), default=list(choices)[0], key=f"technique_{mode}")
-        st.image(technique_png(str(history_dir), stamp, case_id, choices[technique]), use_container_width=True)
+        st.image(technique_png(str(history_dir), stamp, case_id, choices[technique]), width="stretch")
         st.caption(TECHNIQUE_FIGURES[choices[technique]])
     with st.expander("Mapa regional — onde a diferença aparece", expanded=False):
         st.caption("Use este mapa apenas para localizar um padrão já visto no par. Ele divide o pulmão em blocos de 16 px; não é uma nova regra de aprovação.")
@@ -501,7 +551,7 @@ def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, versio
         compared = map_mode == "Comparado com a original"
         layers = {label: key for key, label in MAP_LAYERS.items() if compared or key != "veredito"}
         layer = columns[1].segmented_control("Camada", list(layers), default=list(layers)[0], key=f"map_layer_{mode}_{compared}")
-        st.image(map_png(str(history_dir), stamp, case_id, layers[layer], compared), use_container_width=True)
+        st.image(map_png(str(history_dir), stamp, case_id, layers[layer], compared), width="stretch")
         if compared:
             st.caption("Comparação bloco a bloco com a original. Só é válida quando a anatomia é a mesma; em Dgen, prefira “Valor de cada imagem”.")
 
@@ -579,7 +629,8 @@ with st.sidebar:
                    or selection.endswith("fora da faixa") and technique_statuses(row)[selection.split()[0]] in {"revisão", "reprovada"}]
     case_id = st.selectbox("Corte para inspecionar", choices, format_func=case_name, key="case_selector")
 
-show_method_cards(mode)
+show_method_cards(mode, history["calibration"]["nex_reference"])
+st.markdown(f"#### Resumo do dataset · {dataset}")
 if mode == "brilho":
     statuses = pd.Series([official_brightness_status(row) for row in rows]).value_counts()
     first, second, third = st.columns(3)
@@ -595,17 +646,21 @@ if mode == "brilho":
     third.metric("Wavelet LL: fora da faixa", int(ll.get("revisão", 0) + ll.get("reprovada", 0)), " · ".join(f"{int(ll.get(status, 0))} {status}" for status in METRIC_STATUSES), delta_color="off")
 else:
     statuses = pd.Series([texture_decision(row)[0] for row in rows]).value_counts()
-    first, second, third, fourth = st.columns(4)
-    first.metric("Textura preservada", int(statuses.get("textura preservada", 0)), f"de {len(rows)} cortes")
-    second.metric("Revisão necessária", int(statuses.get("revisão necessária", 0)), "alguma técnica entre 1 e 2 IQR")
-    third.metric("Reprovadas", int(statuses.get("reprovada", 0)), "alguma técnica > 2 IQR")
-    fourth.metric("Brilho", "fora desta aba", "use o filtro de brilho")
-    st.markdown("#### Quem apontou o quê")
+    first, second, third = st.columns(3)
+    first.metric("✓ Textura preservada", int(statuses.get("textura preservada", 0)), f"de {len(rows)} cortes", delta_color="off", delta_arrow="off")
+    second.metric("! Revisão necessária", int(statuses.get("revisão necessária", 0)), "alguma técnica pediu revisão", delta_color="off", delta_arrow="off")
+    third.metric("✕ Reprovadas", int(statuses.get("reprovada", 0)), "alguma técnica reprovou", delta_color="off", delta_arrow="off")
+    st.caption("O brilho não entra nesta contagem; ele é avaliado só no “Filtro de brilho”.")
+    st.markdown("##### Quem apontou o quê")
     for column, technique in zip(st.columns(3), TECHNIQUES):
         counts = pd.Series([technique_statuses(row)[technique] for row in rows]).value_counts()
         column.metric(f"{technique}: fora da faixa", int(counts.get("revisão", 0) + counts.get("reprovada", 0)),
-                      " · ".join(f"{int(counts.get(status, 0))} {status}" for status in (*METRIC_STATUSES, "inconclusivo") if counts.get(status, 0)), delta_color="off")
+                      " · ".join(f"{int(counts.get(status, 0))} {status}" for status in (*METRIC_STATUSES, "inconclusivo") if counts.get(status, 0)).replace("inconclusivo", "inconcl."), delta_color="off", delta_arrow="off")
 
+show_case(board, history_dir, stamp, case_id, version, mode)
+st.markdown("---")
+st.subheader("Todos os cortes do dataset")
+st.caption("Clique em qualquer ponto, célula ou linha para abrir aquele par no topo, em “Par em foco”.")
 if mode == "textura":
     st.markdown("#### Veredito por corte e por técnica")
     st.caption("Cada coluna é um corte. A primeira linha é o veredito de textura; as outras mostram o que cada técnica disse. Passe o mouse para ver o motivo e clique para abrir o corte.")
@@ -669,7 +724,7 @@ with st.expander("Ver todos os cortes e o motivo", expanded=True):
     # reset_index: a linha clicada volta como posição, e ela precisa bater com a ordem mostrada
     table = table.sort_values(["decisão oficial", "|Δμ|"] if mode == "brilho" else ["leitura de textura", "NEx sintética"], ascending=[True, False] if mode == "brilho" else [True, False]).reset_index(drop=True)
     table.insert(0, "em foco", np.where(table["case_id"] == case_id, "●", ""))
-    st.caption("Clique numa linha para abrir o corte abaixo.")
+    st.caption("Clique numa linha para abrir o corte em “Par em foco”.")
     event = st.dataframe(table, hide_index=True, width="stretch", height=320, column_order=[column for column in table.columns if column != "case_id"],
                          on_select="rerun", selection_mode="single-row", key=f"cases_{mode}")
     selected = event.selection.rows
@@ -688,7 +743,6 @@ with st.expander("Ver todos os cortes e o motivo", expanded=True):
         st.caption("A tabela ignora completamente o brilho. As colunas GLCM, Wavelet e NEx mostram a classificação de cada técnica; “leitura de textura” é a pior delas.")
     st.caption("Os pontos e linhas resumem cortes do dataset; fases do mesmo paciente não devem ser interpretadas como pacientes independentes.")
 
-show_case(board, history_dir, stamp, case_id, version, mode)
 with st.expander("Sobre esta avaliação e as versões", expanded=False):
     st.caption("Informação de rastreabilidade: de onde vieram os cortes e como as versões são comparadas. Não é necessária para inspecionar um par.")
     st.caption(f"{len(names)} versão(ões) · {board['n_cases']} cortes comuns · referência da régua: {board['history']['reference']}")
