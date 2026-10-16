@@ -200,14 +200,18 @@ def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling:
             tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("real:Q", format=".4g"), alt.Tooltip("sintética:Q", format=".4g"), alt.Tooltip("veredito:N")],
             opacity=alt.value(.8),
         )
-        panels.append((identity + points).properties(title=title, height=255).configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None))
+        # O título fora do canvas evita o recorte vertical do Vega quando dois
+        # gráficos ocupam a mesma linha.
+        panels.append((title, (identity + points).properties(height=255).configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None)))
     return panels
 
 
 def draw_charts(charts: list, per_row: int = 2) -> None:
     """Distribui os gráficos de textura em linhas legíveis no painel."""
     for start in range(0, len(charts), per_row):
-        for column, chart in zip(st.columns(per_row), charts[start:start + per_row]):
+        for column, item in zip(st.columns(per_row), charts[start:start + per_row]):
+            title, chart = item
+            column.markdown(f"#### {title}")
             column.altair_chart(chart, use_container_width=True)
 
 
