@@ -71,7 +71,7 @@ def glcm_metric_columns(real: dict, synthetic: dict, iqr: dict) -> dict:
 
 
 def ll_columns(real: float, synthetic: float, iqr: float) -> dict:
-    """Brilho segundo a Wavelet (banda LL), na mesma regra de IQR. Só leitura: não entra em nenhum veredito."""
+    """Brilho segundo a Wavelet (banda LL), na mesma regra de IQR. Entra no veredito de brilho do painel."""
     z = (synthetic - real) / max(iqr, 1e-12)
     return {"wavelet_ll_z": z, "wavelet_ll_status": metric_status(z)}
 
@@ -84,6 +84,24 @@ def technique_statuses(row: dict) -> dict:
 def texture_status(row: dict) -> str:
     """Veredito de textura: a pior das três técnicas. O brilho não entra aqui."""
     return worst(technique_statuses(row).values())
+
+
+# Veredito de brilho do painel: GLCM (o filtro do contrato, por Δμ e Sat31 na
+# régua de 32 tons) e Wavelet (média da banda LL, em IQR das originais). A LL
+# acompanha o brilho e pega cortes claros que o Δμ deixa passar; energia e
+# entropia da Wavelet não respondem ao brilho e ficam fora daqui.
+BRIGHTNESS_TECHNIQUES = ("GLCM", "Wavelet")
+GLCM_BRIGHTNESS = {"approved": "aprovada", "manual_review": "revisão", "hard_reject": "reprovada"}
+
+
+def brightness_statuses(row: dict) -> dict:
+    """Classificação de cada técnica de brilho neste corte."""
+    return {"GLCM": GLCM_BRIGHTNESS[row["brightness_status"]], "Wavelet": row["wavelet_ll_status"]}
+
+
+def brightness_verdict(row: dict) -> str:
+    """Veredito de brilho: a pior das duas técnicas. A textura não entra aqui."""
+    return worst(brightness_statuses(row).values())
 
 
 def _inside(value: float) -> bool:

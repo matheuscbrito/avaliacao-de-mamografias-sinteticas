@@ -20,7 +20,7 @@ import altair as alt
 from streamlit.errors import StreamlitAPIException
 
 from frameworks.texture_evaluator.placar import PlacarError, add_version, build_board, load_case, load_history, refresh_history, remove_version, technique_table, write_outputs
-from frameworks.texture_evaluator.decision import GLCM_METRICS, METRIC_STATUSES, NEX_STATUS, TECHNIQUES, WAVELET_METRICS, technique_statuses, texture_status
+from frameworks.texture_evaluator.decision import BRIGHTNESS_TECHNIQUES, GLCM_METRICS, METRIC_STATUSES, NEX_STATUS, TECHNIQUES, WAVELET_METRICS, brightness_statuses, brightness_verdict, technique_statuses, texture_status
 from frameworks.texture_evaluator.glcm.src import quantize
 from frameworks.texture_evaluator.regional import MASK_ONLY, PAIR_MIN_CORRELATION
 from frameworks.texture_evaluator.run_mvp import context_from_dict
@@ -80,20 +80,42 @@ def calibration_limits(history: dict) -> None:
     OFFICIAL_REJECT = 2 * OFFICIAL_REVIEW
 
 
-def official_brightness_status(row: dict) -> str:
-    """Gatekeeper oficial (somente Δμ e saturação no tom 31), como o framework já decidiu em `run_mvp`."""
-    return STATUS_TEXT[row["brightness_status"]]
+BRIGHTNESS_LABEL = {"aprovada": "aprovada", "revisão": "revisão manual", "reprovada": "rejeição direta"}
+
+
+def brightness_decision(row: dict) -> str:
+    """Veredito do filtro de brilho: o mais severo entre GLCM (Δμ, Sat31) e Wavelet (LL)."""
+    return BRIGHTNESS_LABEL[brightness_verdict(row)]
+
+
+def glcm_brightness_why(row: dict) -> str:
+    """Por que a GLCM (régua de 32 tons: Δμ e Sat31) classificou o brilho assim."""
+    delta, saturation = number(row, "abs_delta_mu"), number(row, "sat31_pct")
+    if saturation > OFFICIAL_SATURATION:
+        return f"Sat31 = {saturation:.1f}% passou de 15%: pixels demais no tom mais claro.".replace(".", ",", 1)
+    if delta > OFFICIAL_REJECT:
+        return f"|Δμ| = {br(delta)} passou de {br(OFFICIAL_REJECT)}."
+    if delta > OFFICIAL_REVIEW:
+        return f"|Δμ| = {br(delta)} ficou entre {br(OFFICIAL_REVIEW)} e {br(OFFICIAL_REJECT)}."
+    return f"|Δμ| = {br(delta)} e Sat31 = {saturation:.1f}% dentro dos limites.".replace(f"{saturation:.1f}", f"{saturation:.1f}".replace(".", ","))
+
+
+def wavelet_brightness_why(row: dict) -> str:
+    """Por que a Wavelet (média da banda LL) classificou o brilho assim."""
+    z, status = number(row, "wavelet_ll_z"), row["wavelet_ll_status"]
+    side = "mais clara" if z > 0 else "mais escura"
+    if status == "aprovada":
+        return f"LL da sintética a {f'{z:+.2f}'.replace('.', ',')} IQR da real: dentro de ±1 IQR."
+    limit = "±2 IQR: fora da variação entre CTs reais" if status == "reprovada" else "±1 IQR, mas ficou dentro de ±2 IQR"
+    return f"Sintética {side}: LL a {f'{z:+.2f}'.replace('.', ',')} IQR da real, passou de {limit}."
 
 
 def brightness_explanation(row: dict) -> str:
-    delta, saturation = number(row, "abs_delta_mu"), number(row, "sat31_pct")
-    if saturation > OFFICIAL_SATURATION:
-        return f"Sat31 {saturation:.1f}% ultrapassa 15%"
-    if delta > OFFICIAL_REJECT:
-        return f"|Δμ| {delta:.3f} ultrapassa {br(OFFICIAL_REJECT)}"
-    if delta > OFFICIAL_REVIEW:
-        return f"|Δμ| {delta:.3f} está entre {br(OFFICIAL_REVIEW)} e {br(OFFICIAL_REJECT)}"
-    return f"|Δμ| {delta:.3f} e Sat31 {saturation:.1f}% dentro do gatekeeper"
+    """Motivo do veredito de brilho, citando só as técnicas fora da faixa."""
+    statuses = brightness_statuses(row)
+    why = {"GLCM": glcm_brightness_why, "Wavelet": wavelet_brightness_why}
+    reasons = [f"{technique}: {why[technique](row)}" for technique, status in statuses.items() if status != "aprovada"]
+    return " · ".join(reasons) if reasons else "GLCM e Wavelet LL dentro dos limites"
 
 
 def density_reading(row: dict) -> str:
@@ -189,11 +211,10 @@ def technique_why(row: dict, technique: str, reference: dict) -> str:
     return f"{joined} passou de ±2 IQR: fora da variação entre CTs reais."
 
 
-def texture_summary(row: dict) -> str:
+def verdict_summary(statuses: dict, verdict: str) -> str:
     """Frase do veredito combinado: quem levou o corte a essa classificação."""
-    statuses, verdict = technique_statuses(row), texture_status(row)
     if verdict == "aprovada":
-        return "GLCM, Wavelet e NEx aprovaram."
+        return f"{', '.join(list(statuses)[:-1])} e {list(statuses)[-1]} aprovaram."
     who = [technique for technique, status in statuses.items() if status == verdict]
     verb = "reprovou" if verdict == "reprovada" else "pediu revisão"
     if len(who) > 1:
@@ -367,19 +388,26 @@ def metric_chart(rows: list[dict], prefix: str, key: str):
     return (band_layer + rules + points).resolve_scale(color="independent").properties(height=260).configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None)
 
 
-def verdict_matrix(rows: list[dict]):
+def verdict_matrix(rows: list[dict], mode: str = "textura"):
     """Uma coluna por corte e uma linha por técnica: quem aprovou, quem pediu revisão, quem reprovou."""
-    order = sorted(rows, key=lambda row: (-METRIC_STATUSES.index(texture_status(row)), -sum(s != "aprovada" for s in technique_statuses(row).values()), row["case_id"]))
+    if mode == "brilho":
+        combined, techniques, statuses_of, verdict_of = "Brilho (combinado)", BRIGHTNESS_TECHNIQUES, brightness_statuses, brightness_verdict
+        why = {"GLCM": glcm_brightness_why, "Wavelet": wavelet_brightness_why}
+        reason_of, combined_reason = (lambda row, technique: why[technique](row)), brightness_explanation
+    else:
+        combined, techniques, statuses_of, verdict_of = "Textura (combinado)", TECHNIQUES, technique_statuses, texture_status
+        reason_of, combined_reason = (lambda row, technique: technique_reason(row, technique) or "dentro da faixa"), (lambda row: texture_decision(row)[1])
+    order = sorted(rows, key=lambda row: (-METRIC_STATUSES.index(verdict_of(row)), -sum(s != "aprovada" for s in statuses_of(row).values()), row["case_id"]))
     cells = []
     for row in order:
-        readings = {"Textura (combinado)": (texture_status(row), texture_decision(row)[1]),
-                    **{technique: (status, technique_reason(row, technique) or "dentro da faixa") for technique, status in technique_statuses(row).items()}}
+        readings = {combined: (verdict_of(row), combined_reason(row)),
+                    **{technique: (status, reason_of(row, technique)) for technique, status in statuses_of(row).items()}}
         for line, (status, reason) in readings.items():
             cells.append({"case_id": row["case_id"], "corte": case_name(row["case_id"]), "técnica": line, "classificação": status, "o que disse": reason})
     selection = alt.selection_point(name="cut", fields=["case_id"], on="click", empty=False)
     return alt.Chart(pd.DataFrame(cells)).mark_rect(stroke="white", strokeWidth=1.5).encode(
         x=alt.X("corte:N", sort=[case_name(row["case_id"]) for row in order], title="cortes (os mais graves à esquerda)", axis=alt.Axis(labelAngle=-60, labelFontSize=9)),
-        y=alt.Y("técnica:N", sort=["Textura (combinado)", *TECHNIQUES], title=None, axis=alt.Axis(labelFontWeight="bold", labelLimit=200)),
+        y=alt.Y("técnica:N", sort=[combined, *techniques], title=None, axis=alt.Axis(labelFontWeight="bold", labelLimit=200)),
         color=alt.Color("classificação:N", scale=STATUS_COLORS, legend=alt.Legend(orient="top", title=None)),
         opacity=alt.condition(selection, alt.value(1), alt.value(.82)),
         tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("técnica:N"), alt.Tooltip("classificação:N"), alt.Tooltip("o que disse:N")],
@@ -421,13 +449,13 @@ def brightness_chart(rows: list[dict]):
         "ordem": list(range(1, len(rows) + 1)),
         "delta_mu": [number(row, "delta_mu") for row in rows],
         "sat31": [number(row, "sat31_pct") for row in rows],
-        "decisão": [official_brightness_status(row) for row in rows],
+        "decisão": [STATUS_TEXT[row["brightness_status"]] for row in rows],
     })
     selection = alt.selection_point(name="cut", fields=["case_id"], on="click", nearest=True, empty=False)
     decision_colors = alt.Scale(domain=["aprovada", "revisão manual", "rejeição direta"], range=["#0b6b32", "#925a10", "#9f1f18"])
     base = alt.Chart(data).mark_circle(filled=True).encode(
         x=alt.X("ordem:Q", title="cortes do dataset"),
-        color=alt.Color("decisão:N", title="decisão oficial", scale=decision_colors),
+        color=alt.Color("decisão:N", title="GLCM", scale=decision_colors),
         size=alt.condition(selection, alt.value(285), alt.value(118)),
         stroke=alt.condition(selection, alt.value("#17243b"), alt.value("#24352d")),
         strokeWidth=alt.condition(selection, alt.value(2.2), alt.value(.9)),
@@ -446,13 +474,15 @@ def brightness_chart(rows: list[dict]):
     reject = alt.Chart(pd.DataFrame({"limite": [-OFFICIAL_REJECT, OFFICIAL_REJECT]})).mark_rule(color="#b42318", opacity=.7, strokeDash=[4, 4]).encode(y=alt.Y("limite:Q", scale=delta_scale, title="Δμ · sintética − real"))
     saturation_rule = alt.Chart(pd.DataFrame({"limite": [OFFICIAL_SATURATION]})).mark_rule(color="#b42318", opacity=.7, strokeDash=[4, 4]).encode(y=alt.Y("limite:Q", scale=sat_scale, title="Sat31 (%)"))
     delta = (bands(delta_bands, delta_scale, "Δμ · sintética − real") + review + reject + base.encode(y=alt.Y("delta_mu:Q", title="Δμ · sintética − real", scale=delta_scale))).properties(title="Δμ por corte", width=390, height=280)
-    saturation = (bands(sat_bands, sat_scale, "Sat31 (%)") + saturation_rule + base.encode(y=alt.Y("sat31:Q", title="Sat31 (%)", scale=sat_scale), color=alt.Color("decisão:N", title="decisão oficial", scale=decision_colors, legend=None))).properties(title="Saturação no tom 31", width=390, height=280)
+    saturation = (bands(sat_bands, sat_scale, "Sat31 (%)") + saturation_rule + base.encode(y=alt.Y("sat31:Q", title="Sat31 (%)", scale=sat_scale), color=alt.Color("decisão:N", title="GLCM", scale=decision_colors, legend=None))).properties(title="Saturação no tom 31", width=390, height=280)
     return alt.hconcat(delta, saturation).configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None)
 
 
 def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
     if mode == "brilho":
-        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão oficial": official_brightness_status(row), "por quê": brightness_explanation(row), "densidade": density_reading(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"), "Wavelet LL": metric_reading(row, "wavelet", "ll"), "Wavelet LL |Δ|": ll_shift(row)} for row in rows]
+        data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "decisão de brilho": brightness_decision(row), **brightness_statuses(row),
+                 "por quê": brightness_explanation(row), "|Δμ|": number(row, "abs_delta_mu"), "Sat31 (%)": number(row, "sat31_pct"),
+                 "Wavelet LL": metric_reading(row, "wavelet", "ll"), "densidade (não decide)": density_reading(row)} for row in rows]
     else:
         data = [{"case_id": row["case_id"], "corte": case_name(row["case_id"]), "leitura de textura": texture_decision(row)[0],
                  **technique_statuses(row), "por quê": texture_decision(row)[1],
@@ -469,23 +499,25 @@ def metrics_table(rows: list[dict], mode: str) -> pd.DataFrame:
 
 def show_method_cards(mode: str, reference: dict):
     if mode == "brilho":
-        st.markdown("#### Como o filtro de brilho decide")
-        st.write("Cada corte passa por **dois filtros oficiais**. A categoria vem da combinação deles — não de apenas um número.")
-        tone, saturation = st.columns(2)
-        with tone:
-            st.markdown("**Filtro 1 · diferença média de brilho (|Δμ|)**")
-            st.caption("Compara o tom médio da CT sintética com o da CT real.")
-            st.markdown("- Até **0,314**: dentro da faixa\n- De **0,314 a 0,629**: revisão manual\n- Acima de **0,629**: reprovação direta")
-        with saturation:
-            st.markdown("**Filtro 2 · saturação no tom 31 (Sat31)**")
-            st.caption("Mostra quantos pixels chegaram ao maior tom da régua de 32 níveis.")
-            st.markdown("- Até **15%**: dentro da faixa\n- Acima de **15%**: reprovação direta")
-
-        st.markdown("##### Resultado da combinação")
-        st.success("**Aprovada** — |Δμ| ≤ 0,314 **e** Sat31 ≤ 15%.")
-        st.warning("**Revisão manual** — 0,314 < |Δμ| ≤ 0,629 **e** Sat31 ≤ 15%.")
-        st.error("**Reprovada diretamente** — |Δμ| > 0,629 **ou** Sat31 > 15%.")
-        st.info("**Densidade** (pixels fora da faixa P1–P99 real e deslocamento da mediana) e **brilho segundo a Wavelet** (banda LL: média local de 4×4 px, só o brilho, sem a textura) complementam a inspeção. A Wavelet LL é classificada como as métricas de textura: Δ = LL da sintética − LL da original, em IQR da LL entre as CTs reais (até 1 aprovada, 1–2 revisão, acima de 2 reprovada). Nenhuma das duas altera a categoria oficial, que depende apenas de |Δμ| e Sat31.")
+        st.markdown("#### Limites do brilho")
+        st.write("**Nesta aba, só o brilho decide; a textura não entra.** GLCM e Wavelet classificam o par cada uma sozinha, e o **veredito de brilho** é o da mais severa.")
+        st.markdown(f"""
+| técnica | o que é comparado | ✓ aprovada | ! revisão manual | ✕ rejeição direta |
+|---|---|---|---|---|
+| **GLCM** · \\|Δμ\\| | diferença do tom médio do pulmão, na régua de 32 tons | ≤ {br(OFFICIAL_REVIEW)} | {br(OFFICIAL_REVIEW)} a {br(OFFICIAL_REJECT)} | > {br(OFFICIAL_REJECT)} |
+| **GLCM** · Sat31 | % de pixels do pulmão no tom mais claro (31) | ≤ 15% | — | > 15% |
+| **Wavelet** · LL | Δ = LL da sintética − LL da real, em IQR da LL entre as CTs reais | \\|Δ\\| ≤ 1 IQR | 1 < \\|Δ\\| ≤ 2 IQR | \\|Δ\\| > 2 IQR |
+| **Veredito de brilho** | a técnica mais severa decide | as duas aprovaram | alguma pediu revisão | alguma reprovou |
+""")
+        st.caption("Na GLCM, o pior entre |Δμ| e Sat31 decide a técnica. Os limites de |Δμ| são 1 e 2 IQR das médias pulmonares das CTs reais. A densidade aparece só como contexto e não decide.")
+        with st.expander("O que cada técnica mede", expanded=False):
+            st.dataframe(pd.DataFrame([
+                ["GLCM · |Δμ|", "quanto o tom médio da sintética se afastou do da real, na mesma régua de 32 tons usada pela GLCM"],
+                ["GLCM · Sat31", "quantos pixels estouraram no tom mais claro da régua; pega imagens lavadas mesmo com Δμ pequeno"],
+                ["Wavelet · LL", "média local de 4×4 px (banda LL): acompanha o brilho e ignora o detalhe; pega cortes claros que o Δμ deixa passar"],
+                ["Wavelet · energia e entropia", "não respondem ao brilho (só ao detalhe), por isso ficam na aba de textura"],
+                ["Densidade (contexto)", "pixels fora da faixa P1–P99 real e deslocamento da mediana; não decide"],
+            ], columns=["técnica", "o que ela mede"]), hide_index=True, width="stretch")
     else:
         st.markdown("#### Limites da textura")
         st.write("**Nesta aba, só a textura decide; o brilho não entra.** Cada técnica classifica o par sozinha, e o **veredito de textura** é o da mais severa.")
@@ -506,15 +538,24 @@ def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, versio
     st.markdown("---")
     st.subheader(f"Par em foco · {case_name(case_id)}")
     if mode == "brilho":
-        show, icon = STATUS_BOX[{"approved": "aprovada", "manual_review": "revisão", "hard_reject": "reprovada"}[row["brightness_status"]]]
-        show(f"#### Filtro de brilho: {official_brightness_status(row)}\n{brightness_explanation(row)}. Só |Δμ| e Sat31 decidem.", icon=icon)
-        st.markdown(f"**Densidade:** {density_reading(row)} · **Brilho segundo a Wavelet (LL):** {metric_reading(row, 'wavelet', 'll')}")
+        verdict, statuses = brightness_verdict(row), brightness_statuses(row)
+        show, icon = STATUS_BOX[verdict]
+        show(f"#### Veredito de brilho: {BRIGHTNESS_LABEL[verdict]}\n{verdict_summary(statuses, verdict)}", icon=icon)
+        why = {"GLCM": glcm_brightness_why, "Wavelet": wavelet_brightness_why}
+        details = {"GLCM": f"{STATUS_MARK[statuses['GLCM']]} **|Δμ|**: {br(number(row, 'abs_delta_mu'))} · **Sat31**: {number(row, 'sat31_pct'):.1f}%".replace(".", ","),
+                   "Wavelet": f"{STATUS_MARK[statuses['Wavelet']]} **LL**: real {br(number(row, 'wavelet_ll_real'))} → sintética {br(number(row, 'wavelet_ll_synthetic'))} (0 = P1, 1 = P99)"}
+        for column, technique in zip(st.columns(2), BRIGHTNESS_TECHNIQUES):
+            with column:
+                show, icon = STATUS_BOX[statuses[technique]]
+                show(f"**{technique}: {BRIGHTNESS_LABEL[statuses[technique]]}**  \n{why[technique](row)}", icon=icon)
+                st.markdown(details[technique])
+        st.caption(f"Contexto, não decide · densidade: {density_reading(row)}")
         choices = {"CT real × sintética (Δμ)": "delta_mu", "Densidade · pixels fora da faixa real": "densidade", "Brilho local (Wavelet LL)": "ll"}
     else:
         reference = board["history"]["calibration"]["nex_reference"]
         verdict = texture_status(row)
         show, icon = STATUS_BOX[verdict]
-        show(f"#### Veredito de textura: {TEXTURE_LABEL[verdict]}\n{texture_summary(row)}", icon=icon)
+        show(f"#### Veredito de textura: {TEXTURE_LABEL[verdict]}\n{verdict_summary(technique_statuses(row), verdict)}", icon=icon)
         statuses = technique_statuses(row)
         for column, technique in zip(st.columns(3), TECHNIQUES):
             with column:
@@ -621,8 +662,9 @@ with st.sidebar:
     active_mode = st.radio("Filtro a explorar", ["Análise de textura", "Filtro de brilho"], index=0)
     mode = "textura" if active_mode == "Análise de textura" else "brilho"
     if mode == "brilho":
-        selection = st.selectbox("Mostrar cortes", ["todos", "aprovada", "revisão manual", "rejeição direta"], key="case_filter_brilho")
-        choices = [row["case_id"] for row in rows if selection == "todos" or official_brightness_status(row) == selection]
+        selection = st.selectbox("Mostrar cortes", ["todos", *BRIGHTNESS_LABEL.values(), *(f"{technique} fora da faixa" for technique in BRIGHTNESS_TECHNIQUES)], key="case_filter_brilho")
+        choices = [row["case_id"] for row in rows if selection == "todos" or brightness_decision(row) == selection
+                   or selection.endswith("fora da faixa") and brightness_statuses(row)[selection.split()[0]] in {"revisão", "reprovada"}]
     else:
         selection = st.selectbox("Mostrar cortes", ["todos", *TEXTURE_LABEL.values(), *(f"{technique} fora da faixa" for technique in TECHNIQUES)], key="case_filter_textura")
         choices = [row["case_id"] for row in rows if selection == "todos" or texture_decision(row)[0] == selection
@@ -632,18 +674,20 @@ with st.sidebar:
 show_method_cards(mode, history["calibration"]["nex_reference"])
 st.markdown(f"#### Resumo do dataset · {dataset}")
 if mode == "brilho":
-    statuses = pd.Series([official_brightness_status(row) for row in rows]).value_counts()
+    statuses = pd.Series([brightness_decision(row) for row in rows]).value_counts()
     first, second, third = st.columns(3)
-    first.metric("Aprovadas pelo gatekeeper", int(statuses.get("aprovada", 0)), f"de {len(rows)} cortes")
-    second.metric("Para revisão manual", int(statuses.get("revisão manual", 0)), "regra oficial")
-    third.metric("Rejeições diretas", int(statuses.get("rejeição direta", 0)), "regra oficial")
-    st.markdown("#### Leituras complementares")
-    density = pd.Series([row["density_status"] for row in rows]).value_counts()
-    first, second, third = st.columns(3)
-    first.metric("Densidade: mediana deslocada", int(density.get("brighter", 0) + density.get("darker", 0)), f"clareou ou escureceu · de {len(rows)} cortes")
-    second.metric("Densidade: pixels fora da faixa real", int(density.get("too_bright", 0) + density.get("too_dark", 0)), f"claro ou escuro demais · de {len(rows)} cortes")
-    ll = pd.Series([row["wavelet_ll_status"] for row in rows]).value_counts()
-    third.metric("Wavelet LL: fora da faixa", int(ll.get("revisão", 0) + ll.get("reprovada", 0)), " · ".join(f"{int(ll.get(status, 0))} {status}" for status in METRIC_STATUSES), delta_color="off")
+    first.metric("✓ Brilho aprovado", int(statuses.get("aprovada", 0)), f"de {len(rows)} cortes", delta_color="off", delta_arrow="off")
+    second.metric("! Revisão manual", int(statuses.get("revisão manual", 0)), "alguma técnica pediu revisão", delta_color="off", delta_arrow="off")
+    third.metric("✕ Rejeição direta", int(statuses.get("rejeição direta", 0)), "alguma técnica reprovou", delta_color="off", delta_arrow="off")
+    st.caption("A textura não entra nesta contagem; ela é avaliada só na “Análise de textura”.")
+    st.markdown("##### Quem apontou o quê")
+    for column, technique in zip(st.columns(2), BRIGHTNESS_TECHNIQUES):
+        counts = pd.Series([brightness_statuses(row)[technique] for row in rows]).value_counts()
+        column.metric(f"{technique}: fora da faixa", int(counts.get("revisão", 0) + counts.get("reprovada", 0)),
+                      " · ".join(f"{int(counts.get(status, 0))} {BRIGHTNESS_LABEL[status]}" for status in METRIC_STATUSES if counts.get(status, 0)), delta_color="off", delta_arrow="off")
+    only_wavelet = sum(statuses_["GLCM"] == "aprovada" and statuses_["Wavelet"] != "aprovada" for statuses_ in map(brightness_statuses, rows))
+    if only_wavelet:
+        st.caption(f"{only_wavelet} corte(s) passariam só com a GLCM e foram apontados pela Wavelet LL.")
 else:
     statuses = pd.Series([texture_decision(row)[0] for row in rows]).value_counts()
     first, second, third = st.columns(3)
@@ -657,7 +701,10 @@ else:
         column.metric(f"{technique}: fora da faixa", int(counts.get("revisão", 0) + counts.get("reprovada", 0)),
                       " · ".join(f"{int(counts.get(status, 0))} {status}" for status in (*METRIC_STATUSES, "inconclusivo") if counts.get(status, 0)).replace("inconclusivo", "inconcl."), delta_color="off", delta_arrow="off")
 
-show_case(board, history_dir, stamp, case_id, version, mode)
+if case_id is None:
+    st.info("Nenhum corte nessa categoria. Escolha outro filtro em “Mostrar cortes”.")
+else:
+    show_case(board, history_dir, stamp, case_id, version, mode)
 st.markdown("---")
 st.subheader("Todos os cortes do dataset")
 st.caption("Clique em qualquer ponto, célula ou linha para abrir aquele par no topo, em “Par em foco”.")
@@ -706,15 +753,18 @@ if mode == "textura":
         st.session_state["pending_mode"] = "textura"
         st.rerun()
 else:
-    st.markdown("#### Resposta do gatekeeper de brilho")
-    st.caption("Verde = aprovada, amarelo = revisão manual e vermelho = rejeição direta. No gráfico de Sat31 não há faixa amarela: acima de 15% já reprova. Clique em um ponto para destacá-lo e abrir as CTs brutas daquele corte.")
-    clicked_case = selectable_chart(st, brightness_chart(rows), "brightness_cohort")
-    st.markdown("#### Brilho segundo a Wavelet (LL)")
-    official = {"approved": "aprovada", "manual_review": "revisão", "hard_reject": "reprovada"}
-    agree = sum(official[row["brightness_status"]] == row["wavelet_ll_status"] for row in rows)
-    st.caption(f"Cada ponto é um corte: Δ = brilho LL da sintética − brilho LL da original, em IQR da LL entre as CTs reais. Mesmas cores e faixas do filtro oficial. "
-               f"Só leitura: não muda a decisão oficial. Concorda com o filtro oficial em {agree} de {len(rows)} cortes.")
-    clicked_case = selectable_chart(st, metric_chart(rows, "wavelet", "ll"), "wavelet_ll") or clicked_case
+    st.markdown("#### Veredito por corte e por técnica")
+    st.caption("Cada coluna é um corte. A primeira linha é o veredito de brilho; as outras mostram o que cada técnica disse. Passe o mouse para ver o motivo e clique para abrir o corte.")
+    clicked_case = selectable_chart(st, verdict_matrix(rows, "brilho"), "brightness_matrix")
+    st.markdown("#### Detalhe de cada técnica")
+    glcm_tab, wavelet_tab = st.tabs(["GLCM · Δμ e Sat31", "Wavelet · LL"])
+    with glcm_tab:
+        st.caption("Cores pela classificação da GLCM: verde = aprovada, amarelo = revisão manual, vermelho = rejeição direta. No Sat31 não há faixa amarela: acima de 15% já reprova.")
+        clicked_case = selectable_chart(st, brightness_chart(rows), "brightness_cohort") or clicked_case
+    with wavelet_tab:
+        agree = sum(len(set(brightness_statuses(row).values())) == 1 for row in rows)
+        st.caption(f"Δ = LL da sintética − LL da real, em IQR da LL entre as CTs reais. Verde = aprovada, amarelo = revisão, vermelho = reprovada. Concorda com a GLCM em {agree} de {len(rows)} cortes.")
+        clicked_case = selectable_chart(st, metric_chart(rows, "wavelet", "ll"), "wavelet_ll") or clicked_case
     if clicked_case and clicked_case != case_id:
         st.session_state["pending_case"] = clicked_case
         st.session_state["pending_mode"] = "brilho"
@@ -722,7 +772,10 @@ else:
 with st.expander("Ver todos os cortes e o motivo", expanded=True):
     table = metrics_table(rows, mode)
     # reset_index: a linha clicada volta como posição, e ela precisa bater com a ordem mostrada
-    table = table.sort_values(["decisão oficial", "|Δμ|"] if mode == "brilho" else ["leitura de textura", "NEx sintética"], ascending=[True, False] if mode == "brilho" else [True, False]).reset_index(drop=True)
+    # mais graves primeiro; dentro de cada grupo, o maior desvio
+    severity = {label: index for labels in (BRIGHTNESS_LABEL, TEXTURE_LABEL) for index, label in enumerate(reversed(labels.values()))}
+    verdict_column, spread_column = ("decisão de brilho", "|Δμ|") if mode == "brilho" else ("leitura de textura", "NEx sintética")
+    table = table.assign(_ordem=table[verdict_column].map(severity)).sort_values(["_ordem", spread_column], ascending=[True, False]).drop(columns="_ordem").reset_index(drop=True)
     table.insert(0, "em foco", np.where(table["case_id"] == case_id, "●", ""))
     st.caption("Clique numa linha para abrir o corte em “Par em foco”.")
     event = st.dataframe(table, hide_index=True, width="stretch", height=320, column_order=[column for column in table.columns if column != "case_id"],
@@ -738,7 +791,7 @@ with st.expander("Ver todos os cortes e o motivo", expanded=True):
         st.rerun()
     st.session_state[f"cases_{mode}_last"] = clicked
     if mode == "brilho":
-        st.caption("“Decisão oficial” usa somente |Δμ| e Sat31. Wavelet LL aparece para contexto, mas não altera a categoria.")
+        st.caption("A tabela ignora completamente a textura. As colunas GLCM e Wavelet mostram a classificação de cada técnica; “decisão de brilho” é a mais severa. A densidade aparece só como contexto.")
     else:
         st.caption("A tabela ignora completamente o brilho. As colunas GLCM, Wavelet e NEx mostram a classificação de cada técnica; “leitura de textura” é a pior delas.")
     st.caption("Os pontos e linhas resumem cortes do dataset; fases do mesmo paciente não devem ser interpretadas como pacientes independentes.")

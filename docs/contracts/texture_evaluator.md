@@ -24,3 +24,4 @@ Cada módulo deve devolver uma linha por imagem com `case_id`, `image_type` (`re
 - NEx usa a própria regra: fora de P5–P95 das originais = `revisão`; poucas janelas = `inconclusivo`, que não pesa.
 - Colunas por corte: `{glcm,wavelet}_<métrica>_{real,synthetic,z,status}`, `glcm_status`, `wavelet_status` (a pior métrica de cada técnica), `wavelet_ll_z`, `wavelet_ll_status` e `nex_status`.
 - Veredito de textura = pior classificação entre GLCM, Wavelet e NEx (`decision.texture_status`). Ele não altera `final_status`, em que só o filtro de brilho rejeita.
+- Veredito de brilho do painel = pior classificação entre GLCM (filtro do contrato: Δμ e Sat31) e Wavelet LL (`decision.brightness_verdict`); `reprovada` aparece como rejeição direta. A textura não entra. O `final_status` ainda usa só o filtro do contrato.

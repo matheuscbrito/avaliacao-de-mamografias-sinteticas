@@ -45,7 +45,14 @@ O painel lê cada técnica separadamente, sem mudar o veredito final acima. Toda
 | Wavelet | 2 px, 4 px, entropia | a mesma regra (`wavelet_iqr`); o "tipo" (borrou, ruído…) descreve, não decide |
 | NEx | NEx na ROI | fora de P5–P95 das CTs reais = **revisão**; poucas janelas = inconclusivo, não pesa |
 
-**Brilho segundo a Wavelet (modo de brilho do painel).** A banda LL (média local de 4×4 px, só o brilho) recebe a mesma regra: Δ = LL da sintética − LL da original, em IQR da LL entre as CTs reais (`ll_iqr`; colunas `wavelet_ll_z` e `wavelet_ll_status`). É só leitura, ao lado do filtro oficial (Δμ, Sat31), e não muda nenhuma decisão.
+**Veredito de brilho (aba de brilho do painel).** Duas técnicas, e o veredito é a **pior das duas** (`decision.brightness_verdict`). A textura não entra.
+
+| Técnica | Métricas | Regra |
+|---|---|---|
+| GLCM | \|Δμ\| e Sat31, na régua de 32 tons | \|Δμ\| até 1 IQR das médias pulmonares reais **aprovada**, 1–2 **revisão manual**, acima de 2 **rejeição direta**; Sat31 > 15% **rejeição direta** (o filtro do contrato, `brightness_status`) |
+| Wavelet | LL (média local de 4×4 px, só o brilho) | Δ = LL da sintética − LL da original, em IQR da LL entre as CTs reais (`ll_iqr`; colunas `wavelet_ll_z`, `wavelet_ll_status`): até 1 **aprovada**, 1–2 **revisão manual**, acima de 2 **rejeição direta** |
+
+A LL entra porque acompanha o brilho e pega cortes claros que o Δμ deixa passar; energia e entropia da Wavelet não respondem ao brilho e ficam só na textura. A densidade continua como contexto e não decide no painel. No Dgen, 3 cortes aprovados pela GLCM vão para revisão pela LL (18 aprovados, 14 revisão, 5 rejeição direta); no Dsr, as duas concordam (35 e 2). O `final_status` acima ainda usa só o filtro do contrato.
 
 Colunas: `glcm_*_z`, `glcm_*_status`, `glcm_status`, `wavelet_*_z`, `wavelet_*_status`, `wavelet_status` e `nex_status`. O painel mostra uma matriz "quem disse o quê" (corte × técnica) e uma aba por técnica com os gráficos de cada métrica. A reprovação vale só na leitura de textura; o veredito final acima continua mandando textura para revisão. No Dsr: 8 preservadas, 29 revisão, 0 reprovadas; no Dgen: 2, 26 e 9. A regra é branda porque a textura varia muito entre cortes reais (o IQR do 2 px é ~47% da mediana).
 
