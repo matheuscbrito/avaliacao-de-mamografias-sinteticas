@@ -58,8 +58,14 @@ Para acompanhar o modelo ao longo das iterações. Cada versão é a pasta de sa
   --version v2=CAMINHO/DA/VERSAO2
 ```
 
-Cada par é montado pelo nome (`X.tiff` ↔ `X_generate.tiff` ↔ `X_mask.tiff`) e conferido em [`regional.py`](regional.py). No modo **mesma anatomia** (como o Dsr), um par com correlação < 0,5 com a original é rejeitado como suspeito (arquivo trocado?). No modo **só máscara** (como o Dgen), o par só é conferido pelo nome e o mapa por região não se aplica. O placar e a interface separam **veredito final**, **brilho** e **textura**; o mapa por região (blocos de 16 px) entra como indicadores de área e correlação espacial, e a interface mostra qualquer corte em todas as versões lado a lado, com um mapa de brilho e outro de textura.
+Cada par é montado pelo nome (`X.tiff` ↔ `X_generate.tiff` ↔ `X_mask.tiff`) e conferido em [`regional.py`](regional.py). No modo **mesma anatomia** (como o Dsr), um par com correlação < 0,5 com a original é rejeitado como suspeito (arquivo trocado?). No modo **só máscara** (como o Dgen: outro pulmão no mesmo contorno), o par só é conferido pelo nome, e o que compara ponto a ponto (área alterada, correlação espacial, mapa comparado com a original) fica como n/a. O placar e a interface separam **veredito final**, **brilho** e **textura**, com uma linha por técnica (ex.: "Wavelet 2 px (textura fina)"). Na interface, cada técnica mostra a imagem do que ela enxerga no corte escolhido, na original e em cada versão, e o mapa por região (blocos de 16 px) tem dois modos: valor de cada imagem (qualquer versão) e comparado com a original (só mesma anatomia).
 
 `--remove NOME` tira uma versão. O resultado fica em `placar.md` (mediana de cada indicador com intervalo de 95%, vereditos e se cada versão melhorou, piorou ou não mudou em relação à anterior), `placar.csv`, `comparacao.csv` e `por_caso.csv`. Exemplo e validação em [`resultados/placar_versoes/resumo.md`](../../resultados/placar_versoes/resumo.md).
 
 Depois da execução, abra `outputs/mvp/report/index.html` no navegador. Ele explica cada número, mostra os gráficos pareados real × sintética e traz uma ficha visual para cada corte analisado.
+
+## Próximos passos
+
+- **Comparar com pulmões reais, não só com a original do par.** Hoje brilho e textura são medidos contra a original de cada par. Para um gerador que cria um pulmão novo (modo só máscara, como o Dgen), essa original é outro pulmão no mesmo contorno, e o que compara ponto a ponto fica como n/a. Um modo "comparado com pulmões reais" mediria se cada corte (e cada bloco do mapa) cabe na faixa de variação das originais reais. Ele valeria igualmente para qualquer gerador, pareado ou não, e acabaria com o n/a. O modo atual, comparado com a original, ficaria como leitura extra quando a anatomia é a mesma.
+- Calibrar os limites de textura e da checagem do par com avaliação visual de alguém da área.
+- Integrar a terceira métrica (NEx) e avaliar a qualidade dos nódulos.
