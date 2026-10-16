@@ -312,14 +312,14 @@ def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling:
         # entropia normalizada fica toda perto de 0,94: a partir de zero os pontos viram um borrão
         lower = .98 * min(data["real"].min(), data["sintética"].min()) if title in {"Wavelet · entropia", "NEx · assinatura espectral"} else 0
         identity = alt.Chart(pd.DataFrame({"x": [lower, upper], "y": [lower, upper]})).mark_line(color="#8a5a22", strokeDash=[4, 4]).encode(x="x:Q", y="y:Q")
-        selection = alt.selection_point(name="cut", fields=["case_id"], on="click", nearest=True, empty=False)
+        selection = alt.selection_point(name="cut", fields=["case_id"], on="click", empty=False)
         points = alt.Chart(data).mark_circle(size=75, color="#0d6b61").encode(
             x=alt.X("real:Q", title=f"real · {label}", scale=alt.Scale(domain=[lower, upper])),
             y=alt.Y("sintética:Q", title=f"sintética · {label}", scale=alt.Scale(domain=[lower, upper])),
             tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("real:Q", format=".4g"), alt.Tooltip("sintética:Q", format=".4g"), alt.Tooltip("veredito:N")],
-            size=alt.condition(selection, alt.value(190), alt.value(75)),
-            stroke=alt.condition(selection, alt.value("#17243b"), alt.value("#0a4f48")),
-            strokeWidth=alt.condition(selection, alt.value(1.8), alt.value(.7)),
+            size=focused(190, 75),
+            stroke=focused("#17243b", "#0a4f48"),
+            strokeWidth=focused(1.8, .7),
             opacity=alt.value(.9),
         ).add_params(selection)
         # O título fora do canvas evita o recorte vertical do Vega quando dois
@@ -341,19 +341,32 @@ def draw_charts(charts: list, per_row: int = 2) -> None:
     return clicked_case
 
 
+FOCUS_CASE = None  # corte em foco; definido depois da barra lateral
+
+
+def focused(on, off):
+    """Destaca o corte em foco. Vem do corte escolhido, não da seleção do gráfico."""
+    return alt.condition(alt.datum.case_id == FOCUS_CASE, alt.value(on), alt.value(off))
+
+
 def selectable_chart(container, chart, key: str) -> str | None:
     """Gráfico clicável quando o Streamlit permite; senão, o mesmo gráfico sem clique.
+
+    A chave inclui o corte em foco: a cada troca de corte (por clique, tabela ou
+    barra lateral) os gráficos voltam sem seleção. Sem isso, a seleção antiga de
+    um gráfico continuava ativa e puxava o painel de volta para outro par.
 
     Algumas versões do Streamlit (ex.: 1.50) recusam seleção em gráficos com
     camadas ou compostos; nelas o corte continua sendo aberto pela tabela.
     """
     try:
-        event = container.altair_chart(chart, width="stretch", on_select="rerun", selection_mode="cut", key=key)
+        event = container.altair_chart(chart, width="stretch", on_select="rerun", selection_mode="cut", key=f"{key}__{FOCUS_CASE}")
     except StreamlitAPIException:
         container.altair_chart(chart, width="stretch")
         return None
     picked = event.selection.get("cut", [])
-    return picked[0].get("case_id") if picked else None
+    case = picked[0].get("case_id") if picked else None
+    return case if case != FOCUS_CASE else None
 
 
 def metric_chart(rows: list[dict], prefix: str, key: str):
@@ -374,14 +387,14 @@ def metric_chart(rows: list[dict], prefix: str, key: str):
         y=alt.Y("início:Q", scale=scale, title="Δ (IQR das CTs reais)"), y2="fim:Q",
         color=alt.Color("faixa:N", scale=alt.Scale(domain=list(METRIC_STATUSES), range=["#dff3e5", "#fff0c2", "#fde3e1"]), legend=None))
     rules = alt.Chart(pd.DataFrame({"limite": [-2, -1, 1, 2]})).mark_rule(color="#8a5a22", opacity=.6, strokeDash=[4, 4]).encode(y=alt.Y("limite:Q", scale=scale))
-    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", nearest=True, empty=False)
+    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", empty=False)
     points = alt.Chart(data).mark_circle(filled=True).encode(
         x=alt.X("ordem:Q", title="cortes do dataset"),
         y=alt.Y("z:Q", scale=scale, title="Δ (IQR das CTs reais)"),
         color=alt.Color("classificação:N", scale=colors, legend=None),
-        size=alt.condition(selection, alt.value(285), alt.value(118)),
-        stroke=alt.condition(selection, alt.value("#17243b"), alt.value("#24352d")),
-        strokeWidth=alt.condition(selection, alt.value(2.2), alt.value(.9)),
+        size=focused(285, 118),
+        stroke=focused("#17243b", "#24352d"),
+        strokeWidth=focused(2.2, .9),
         tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("z:Q", title="diferença (IQR)", format="+.2f"), alt.Tooltip("% da original:Q", format=".0f"), alt.Tooltip("classificação:N")],
     ).add_params(selection)
     # escalas de cor independentes: senão as faixas (tons claros) e os pontos (tons fortes) dividem uma só escala
@@ -409,7 +422,8 @@ def verdict_matrix(rows: list[dict], mode: str = "textura"):
         x=alt.X("corte:N", sort=[case_name(row["case_id"]) for row in order], title="cortes (os mais graves à esquerda)", axis=alt.Axis(labelAngle=-60, labelFontSize=9)),
         y=alt.Y("técnica:N", sort=[combined, *techniques], title=None, axis=alt.Axis(labelFontWeight="bold", labelLimit=200)),
         color=alt.Color("classificação:N", scale=STATUS_COLORS, legend=alt.Legend(orient="top", title=None)),
-        opacity=alt.condition(selection, alt.value(1), alt.value(.82)),
+        opacity=focused(1, .82),
+        stroke=focused("#17243b", "white"), strokeWidth=focused(2.5, 1.5),
         tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("técnica:N"), alt.Tooltip("classificação:N"), alt.Tooltip("o que disse:N")],
     ).add_params(selection).properties(height=alt.Step(34)).configure_view(stroke=None)
 
@@ -428,14 +442,14 @@ def nex_chart(rows: list[dict], reference: dict):
     pad = .08 * (max(values) - min(values))
     scale = alt.Scale(domain=[min(values) - pad, max(values) + pad])
     band = alt.Chart(pd.DataFrame({"início": [reference["p5"]], "fim": [reference["p95"]]})).mark_rect(opacity=.14, color="#2f9e57").encode(y=alt.Y("início:Q", scale=scale, title="NEx da sintética"), y2="fim:Q")
-    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", nearest=True, empty=False)
+    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", empty=False)
     points = alt.Chart(data).mark_circle(filled=True).encode(
         x=alt.X("ordem:Q", title="cortes do dataset"),
         y=alt.Y("NEx sintética:Q", scale=scale, title="NEx da sintética"),
         color=alt.Color("classificação:N", scale=STATUS_COLORS, legend=None),
-        size=alt.condition(selection, alt.value(285), alt.value(118)),
-        stroke=alt.condition(selection, alt.value("#17243b"), alt.value("#24352d")),
-        strokeWidth=alt.condition(selection, alt.value(2.2), alt.value(.9)),
+        size=focused(285, 118),
+        stroke=focused("#17243b", "#24352d"),
+        strokeWidth=focused(2.2, .9),
         tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("NEx sintética:Q", format=".3f"), alt.Tooltip("NEx real:Q", format=".3f"), alt.Tooltip("classificação:N")],
     ).add_params(selection)
     return (band + points).properties(height=260).configure_axis(grid=True, gridOpacity=.14).configure_view(stroke=None)
@@ -451,14 +465,14 @@ def brightness_chart(rows: list[dict]):
         "sat31": [number(row, "sat31_pct") for row in rows],
         "decisão": [STATUS_TEXT[row["brightness_status"]] for row in rows],
     })
-    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", nearest=True, empty=False)
+    selection = alt.selection_point(name="cut", fields=["case_id"], on="click", empty=False)
     decision_colors = alt.Scale(domain=["aprovada", "revisão manual", "rejeição direta"], range=["#0b6b32", "#925a10", "#9f1f18"])
     base = alt.Chart(data).mark_circle(filled=True).encode(
         x=alt.X("ordem:Q", title="cortes do dataset"),
         color=alt.Color("decisão:N", title="GLCM", scale=decision_colors),
-        size=alt.condition(selection, alt.value(285), alt.value(118)),
-        stroke=alt.condition(selection, alt.value("#17243b"), alt.value("#24352d")),
-        strokeWidth=alt.condition(selection, alt.value(2.2), alt.value(.9)),
+        size=focused(285, 118),
+        stroke=focused("#17243b", "#24352d"),
+        strokeWidth=focused(2.2, .9),
         tooltip=[alt.Tooltip("corte:N"), alt.Tooltip("delta_mu:Q", title="Δμ", format="+.3f"), alt.Tooltip("sat31:Q", title="Sat31 (%)", format=".2f"), alt.Tooltip("decisão:N")],
         opacity=alt.value(1),
     ).add_params(selection)
@@ -536,7 +550,12 @@ def show_method_cards(mode: str, reference: dict):
 def show_case(board: dict, history_dir: Path, stamp: float, case_id: str, version: str, mode: str):
     row = next(item for item in board["rows"][version] if item["case_id"] == case_id)
     st.markdown("---")
-    st.subheader(f"Par em foco · {case_name(case_id)}")
+    title, close = st.columns([5, 1], vertical_alignment="bottom")
+    title.subheader(f"Par em foco · {case_name(case_id)}")
+    if close.button("Fechar par", key=f"close_{case_id}", width="stretch"):
+        st.session_state["pending_case"] = None
+        st.session_state["pending_mode"] = mode
+        st.rerun()
     if mode == "brilho":
         verdict, statuses = brightness_verdict(row), brightness_statuses(row)
         show, icon = STATUS_BOX[verdict]
@@ -669,7 +688,8 @@ with st.sidebar:
         selection = st.selectbox("Mostrar cortes", ["todos", *TEXTURE_LABEL.values(), *(f"{technique} fora da faixa" for technique in TECHNIQUES)], key="case_filter_textura")
         choices = [row["case_id"] for row in rows if selection == "todos" or texture_decision(row)[0] == selection
                    or selection.endswith("fora da faixa") and technique_statuses(row)[selection.split()[0]] in {"revisão", "reprovada"}]
-    case_id = st.selectbox("Corte para inspecionar", choices, format_func=case_name, key="case_selector")
+    case_id = st.selectbox("Corte para inspecionar", choices, index=None, placeholder="nenhum par aberto", format_func=case_name, key="case_selector")
+FOCUS_CASE = case_id
 
 show_method_cards(mode, history["calibration"]["nex_reference"])
 st.markdown(f"#### Resumo do dataset · {dataset}")
@@ -701,8 +721,10 @@ else:
         column.metric(f"{technique}: fora da faixa", int(counts.get("revisão", 0) + counts.get("reprovada", 0)),
                       " · ".join(f"{int(counts.get(status, 0))} {status}" for status in (*METRIC_STATUSES, "inconclusivo") if counts.get(status, 0)).replace("inconclusivo", "inconcl."), delta_color="off", delta_arrow="off")
 
-if case_id is None:
+if not choices:
     st.info("Nenhum corte nessa categoria. Escolha outro filtro em “Mostrar cortes”.")
+elif case_id is None:
+    st.info("Nenhum par aberto. Clique num ponto, célula ou linha em “Todos os cortes do dataset”, ou escolha um corte na barra lateral.")
 else:
     show_case(board, history_dir, stamp, case_id, version, mode)
 st.markdown("---")
@@ -779,17 +801,14 @@ with st.expander("Ver todos os cortes e o motivo", expanded=True):
     table.insert(0, "em foco", np.where(table["case_id"] == case_id, "●", ""))
     st.caption("Clique numa linha para abrir o corte em “Par em foco”.")
     event = st.dataframe(table, hide_index=True, width="stretch", height=320, column_order=[column for column in table.columns if column != "case_id"],
-                         on_select="rerun", selection_mode="single-row", key=f"cases_{mode}")
+                         on_select="rerun", selection_mode="single-row", key=f"cases_{mode}__{case_id}")
     selected = event.selection.rows
     clicked = table.iloc[selected[0]]["case_id"] if selected else None
-    # a seleção continua ativa nas próximas execuções: só um clique novo muda o corte,
-    # senão a escolha feita na barra lateral seria desfeita
-    if clicked and clicked != st.session_state.get(f"cases_{mode}_last") and clicked != case_id:
-        st.session_state[f"cases_{mode}_last"] = clicked
+    # a chave muda com o corte em foco, então toda seleção aqui é um clique novo
+    if clicked and clicked != case_id:
         st.session_state["pending_case"] = clicked
         st.session_state["pending_mode"] = mode
         st.rerun()
-    st.session_state[f"cases_{mode}_last"] = clicked
     if mode == "brilho":
         st.caption("A tabela ignora completamente a textura. As colunas GLCM e Wavelet mostram a classificação de cada técnica; “decisão de brilho” é a mais severa. A densidade aparece só como contexto.")
     else:
