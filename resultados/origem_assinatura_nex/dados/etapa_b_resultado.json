@@ -1,0 +1,99 @@
+{
+  "mediana_dA": 0.047665566305286684,
+  "mediana_dS": 0.608999975781904,
+  "mediana_controle_AS_menos_S": 0.03488971370706527,
+  "razao_dA_dS": 0.07826858489458585,
+  "auc_R_vs_AR": 0.5693,
+  "auc_AR_vs_S": 0.8873,
+  "auc_R_vs_S": 0.9219,
+  "wilcoxon_p_dA": 0.006810691025659219,
+  "leitura_pre_especificada": "o sinal aparece na difusão/amostragem, não no AEKL",
+  "rho1_y_mediana": {
+    "R": 0.9813921935993917,
+    "A(R)": 0.9817891316243685,
+    "S": 0.9948986468501044,
+    "A(S)": 0.9948043546136551
+  },
+  "auc_R_vs_AR_por_escore": {
+    "nex": 0.5693,
+    "nex_x": 0.5329,
+    "nex_y": 0.5909,
+    "eoc_y": 0.5297,
+    "fft_y": 0.5223,
+    "fft_x": 0.5301,
+    "ac_rho1_y": 0.5271,
+    "hf_beta": 0.5142
+  },
+  "auc_R_vs_S_por_escore": {
+    "nex": 0.9219,
+    "nex_x": 0.8046,
+    "nex_y": 0.9134,
+    "eoc_y": 0.6802,
+    "fft_y": 0.6319,
+    "fft_x": 0.6902,
+    "ac_rho1_y": 0.9939,
+    "hf_beta": 0.6743
+  },
+  "por_paciente": {
+    "Paciente A": {
+      "n": 9,
+      "mediana_dA": -0.0880194708501002,
+      "mediana_dS": 0.3452605294538914,
+      "wilcoxon_p_dA": 0.203125
+    },
+    "Paciente B": {
+      "n": 13,
+      "mediana_dA": 0.052705965512070505,
+      "mediana_dS": 0.2033044982446307,
+      "wilcoxon_p_dA": 0.021484375
+    },
+    "Paciente C": {
+      "n": 78,
+      "mediana_dA": 0.05687910666120245,
+      "mediana_dS": 0.714009227317761,
+      "wilcoxon_p_dA": 0.009256217417798454
+    }
+  },
+  "medianas": {
+    "R": {
+      "nex": 0.150903,
+      "nex_x": 0.059014,
+      "nex_y": -0.165289,
+      "eoc_y": 0.010201,
+      "fft_y": 0.553888,
+      "fft_x": 0.383886,
+      "ac_rho1_y": 0.981392,
+      "hf_beta": 2.919121
+    },
+    "A(R)": {
+      "nex": 0.237875,
+      "nex_x": 0.097909,
+      "nex_y": -0.018546,
+      "eoc_y": 0.011935,
+      "fft_y": 0.551218,
+      "fft_x": 0.460333,
+      "ac_rho1_y": 0.981789,
+      "hf_beta": 2.943492
+    },
+    "S": {
+      "nex": 0.714391,
+      "nex_x": 0.410576,
+      "nex_y": 0.547941,
+      "eoc_y": 0.019921,
+      "fft_y": 0.782431,
+      "fft_x": 0.632745,
+      "ac_rho1_y": 0.994899,
+      "hf_beta": 3.162166
+    },
+    "A(S)": {
+      "nex": 0.793445,
+      "nex_x": 0.645645,
+      "nex_y": 0.496831,
+      "eoc_y": 0.020413,
+      "fft_y": 0.569646,
+      "fft_x": 0.520086,
+      "ac_rho1_y": 0.994804,
+      "hf_beta": 3.129558
+    }
+  }
+}

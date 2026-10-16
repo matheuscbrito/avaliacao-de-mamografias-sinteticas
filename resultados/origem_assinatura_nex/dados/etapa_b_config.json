@@ -1,0 +1,15 @@
+{
+  "run_id": "20260925T0716",
+  "protocolo": "docs/etapa-b/PROTOCOLO.md",
+  "protocolo_blob": "14f65be588c26c4ed53e9f56e1615b4903b0dfd2",
+  "commit": "46f87be18e1c7c159c25a458ac51992681e8b035",
+  "dirty_paths": [
+    "?? scripts/11_a2_suavidade.py",
+    "?? src/nyquist_excess/spectral.py"
+  ],
+  "script_sha256": "05579d6e3676037ec1910b23a1bba9408ebf0110a10b637e7a52572b9706428e",
+  "aekl_manifest_sha256": "4239b08aae1fd7a344c1c25b2911a6f3d798a7247a8be797c4c18ffc8ec06f86",
+  "aekl_checkpoint_sha256": "f9cf5ec7e4a9e8478005b25b1495612c5caa1d53d831864fd8affd7e34f550c4",
+  "unidade": "corte; 3 pacientes",
+  "python": "3.14.3"
+}

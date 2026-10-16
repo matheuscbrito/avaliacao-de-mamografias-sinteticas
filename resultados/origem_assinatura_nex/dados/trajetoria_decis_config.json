@@ -1,0 +1,118 @@
+{
+  "run_id": "20261002T1237",
+  "script": "15_decis_trajetoria.py",
+  "script_sha256": "032476fef5498a2829c4e38a6392439a59b7df97fdea517aa5ff29811939b18f",
+  "modulos_sha256": {
+    "metric.py": "a64ac20c2f39162644c5ad0499c04ebb0c42f9a2f2bf99a0b4a78f6dbe6ae9f2",
+    "harmonize.py": "8543a1e1ba30420023dc8429ebef396594c51d0cbcd929f811a61553650cb3d2",
+    "glcm.py": "ac7072230b2cc209d5c224811013ad34e1d821a67a5a4b8f45c650f2fec90fdc",
+    "blind.py": "dcfff75617176f381e691441f8b3e75aa82c986fe5d716479f116bf92774e9ed"
+  },
+  "sintese": {
+    "runner": "synthesize_dsr_deciles.py",
+    "run_json_sha256": "e8174e393936eea87c42d78d587c541c96d8fb5e6c94c3df045283e36c910173",
+    "args": {
+      "num_inference_steps": 1000,
+      "noise_level": 1,
+      "seed": 42,
+      "scale_factor": 1.0002200603485107,
+      "no_amp": false
+    },
+    "decis": [
+      {
+        "decile": 0,
+        "completedSteps": 0,
+        "xtTimestep": 999,
+        "x0PredictedAtTimestep": null
+      },
+      {
+        "decile": 10,
+        "completedSteps": 100,
+        "xtTimestep": 899,
+        "x0PredictedAtTimestep": 900
+      },
+      {
+        "decile": 20,
+        "completedSteps": 200,
+        "xtTimestep": 799,
+        "x0PredictedAtTimestep": 800
+      },
+      {
+        "decile": 30,
+        "completedSteps": 300,
+        "xtTimestep": 699,
+        "x0PredictedAtTimestep": 700
+      },
+      {
+        "decile": 40,
+        "completedSteps": 400,
+        "xtTimestep": 599,
+        "x0PredictedAtTimestep": 600
+      },
+      {
+        "decile": 50,
+        "completedSteps": 500,
+        "xtTimestep": 499,
+        "x0PredictedAtTimestep": 500
+      },
+      {
+        "decile": 60,
+        "completedSteps": 600,
+        "xtTimestep": 399,
+        "x0PredictedAtTimestep": 400
+      },
+      {
+        "decile": 70,
+        "completedSteps": 700,
+        "xtTimestep": 299,
+        "x0PredictedAtTimestep": 300
+      },
+      {
+        "decile": 80,
+        "completedSteps": 800,
+        "xtTimestep": 199,
+        "x0PredictedAtTimestep": 200
+      },
+      {
+        "decile": 90,
+        "completedSteps": 900,
+        "xtTimestep": 99,
+        "x0PredictedAtTimestep": 100
+      },
+      {
+        "decile": 100,
+        "completedSteps": 1000,
+        "xtTimestep": 0,
+        "x0PredictedAtTimestep": 0
+      }
+    ]
+  },
+  "pre_processamento": "harmonize_background (máscara >= 0,5; fundo z-score de y = 0)",
+  "nex": "metric.nyquist_excess na imagem 512x512 harmonizada; nex = max(nex_x, nex_y)",
+  "glcm": {
+    "niveis": 32,
+    "distancia_px": 1,
+    "angulos_graus": [
+      0,
+      45,
+      90,
+      135
+    ],
+    "simetrica": true,
+    "normalizada": true,
+    "agregacao": "média dos 4 ângulos",
+    "quantizacao": "linear, saturada; limites P1-P99 dos 100 reais harmonizados (até 50 000 px/imagem, semente 0)",
+    "limites": [
+      -0.6060771942138672,
+      2.3239688873291016
+    ]
+  },
+  "inside_mean/std": "média e desvio dos pixels com máscara >= 0,5, antes da harmonização",
+  "unidade": "corte; 100 cortes de 3 pacientes",
+  "versoes": {
+    "python": "3.12.3",
+    "numpy": "2.5.3",
+    "pandas": "3.0.6",
+    "tifffile": "2026.9.20"
+  }
+}

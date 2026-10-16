@@ -1,6 +1,6 @@
 # Contrato de integração do avaliador de textura
 
-Esta especificação é para a futura junção de GLCM, Wavelet e NEXP. Não implementa as métricas pendentes.
+Esta especificação é para a futura junção de GLCM, Wavelet e NEx. Não implementa as métricas pendentes.
 
 ## Entrada comum
 
@@ -13,5 +13,7 @@ Cada módulo deve devolver uma linha por imagem com `case_id`, `image_type` (`re
 ## Regras
 
 - Não misturar resultados de versões diferentes de pré-processamento.
-- GLCM usa a régua robusta calibrada nos reais; Wavelet e NEXP devem declarar explicitamente qualquer normalização própria.
+- GLCM usa a régua robusta calibrada nos reais; Wavelet e NEx devem declarar explicitamente qualquer normalização própria.
+- NEx não tem normalização própria: é invariante a `a·I + b` (brilho e ganho). Os números de referência atuais foram medidos na imagem inteira com fundo harmonizado, não na ROI erodida; ao integrar, a referência real precisa ser recalculada na ROI do MVP.
+- NEx não identifica a causa da diferença. No Dsr, a assinatura aparece na difusão/amostragem, não no AEKL isolado ([`resultados/origem_assinatura_nex/resumo.md`](../../resultados/origem_assinatura_nex/resumo.md)); motivos de revisão baseados nele não devem atribuí-la ao decodificador.
 - ROC/AUC avalia capacidade de detectar diferenças entre reais e sintéticas. AUC alta é alerta de separação, não selo de qualidade da síntese.
