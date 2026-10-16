@@ -193,6 +193,13 @@ def texture_chart(rows: list[dict], glcm_ceiling: float | None, wavelet_ceiling:
     return panels
 
 
+def draw_charts(charts: list, per_row: int = 2) -> None:
+    """Distribui os gráficos de textura em linhas legíveis no painel."""
+    for start in range(0, len(charts), per_row):
+        for column, chart in zip(st.columns(per_row), charts[start:start + per_row]):
+            column.altair_chart(chart, use_container_width=True)
+
+
 def brightness_chart(rows: list[dict]):
     """Os gráficos oficiais de brilho, com faixas e seleção do corte por clique."""
     data = pd.DataFrame({
